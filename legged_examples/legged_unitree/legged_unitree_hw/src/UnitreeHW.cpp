@@ -78,6 +78,7 @@ void UnitreeHW::read(const ros::Time& time, const ros::Duration& /*period*/) {
 
   for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
     contactState_[i] = lowState_.footForce[i] > contactThreshold_;
+    printf("get the footForce");
   }
 
   // Set feedforward and velocity cmd to zero to avoid for safety when not controller setCommand
