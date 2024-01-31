@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <legged_hw/LeggedHW.h>
+
 #ifdef UNITREE_SDK_3_3_1
 #include "unitree_legged_sdk_3_3_1/safety.h"
 #include "unitree_legged_sdk_3_3_1/udp.h"
@@ -12,14 +14,6 @@
 #include "unitree_legged_sdk_3_8_0/udp.h"
 #include "unitree_legged_sdk_3_8_0/safety.h"
 #endif
-
-#include <legged_hw/LeggedHW.h>
-#include <sensor_msgs/Imu.h>
-#include <sensor_msgs/JointState.h>
-#include <vector>
-
-#define NUM_DOF 12
-#define NUM_LEG 4
 
 namespace legged {
 const std::vector<std::string> CONTACT_SENSOR_NAMES = {"RF_FOOT", "LF_FOOT", "RH_FOOT", "LH_FOOT"};
@@ -71,6 +65,8 @@ class UnitreeHW : public LeggedHW {
    */
   void write(const ros::Time& time, const ros::Duration& period) override;
 
+  void updateJoystick(const ros::Time& time);
+
  private:
   bool setupJoints();
 
@@ -87,20 +83,11 @@ class UnitreeHW : public LeggedHW {
   UnitreeImuData imuData_{};
   bool contactState_[4]{};  // NOLINT(modernize-avoid-c-arrays)
 
-  double contactBias_[4]{};
-  bool first_contact_force_read;
-  ros::Time initTime;
-
   int powerLimit_{};
   int contactThreshold_{};
 
-  // ros message and publisher for vilo
-  sensor_msgs::JointState joint_foot_msg;
-  sensor_msgs::Imu imu_msg;
-  ros::Publisher imu_pub;
-  ros::Publisher joint_foot_pub;
-  std::vector<int> swap_joint_indices;
-  std::vector<int> swap_foot_indices;
+  ros::Publisher joyPublisher_;
+  ros::Time lastPub_;
 };
 
 }  // namespace legged
