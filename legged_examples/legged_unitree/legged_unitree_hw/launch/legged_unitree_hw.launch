@@ -11,4 +11,8 @@
 
     <param name="robot_type" value="$(arg robot_type)"/>
     <include file="$(find legged_unitree_hw)/launch/$(arg robot_type).launch"/>
+
+    <!-- Setup a transform between the camera and the robot -->
+    <node pkg="tf" type="static_transform_publisher" name="camera_to_robot" args="0.28 -0.0 0.11 0 0.785 0  /base /camera_link 10"/>
+
 </launch>
