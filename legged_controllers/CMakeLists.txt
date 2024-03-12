@@ -15,6 +15,9 @@ find_package(catkin REQUIRED
         ocs2_legged_robot_ros
         ocs2_self_collision_visualization
         angles
+        std_msgs
+        galileo_ros
+        message_generation
         )
 
 find_package(PkgConfig REQUIRED)
@@ -35,6 +38,9 @@ catkin_package(
         ocs2_legged_robot_ros
         ocs2_self_collision_visualization
         angles
+        std_msgs 
+        galileo_ros 
+        message_runtime
 )
 
 ###########

@@ -73,6 +73,8 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
   // Safety Checker
   safetyChecker_ = std::make_shared<SafetyChecker>(leggedInterface_->getCentroidalModelInfo());
 
+  galileo_client_ = nh.serviceClient<galileo_ros::DesiredStateInputCmd>("get_desired_state_input");
+
   return true;
 }
 
@@ -109,9 +111,22 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   mpcMrtInterface_->updatePolicy();
 
   // Evaluate the current policy
-  vector_t optimizedState, optimizedInput;
+  vector_t dep_optimizedState, dep_optimizedInput, optimizedState, optimizedInput;
   size_t plannedMode = 0;  // The mode that is active at the time the policy is evaluated at.
-  mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, optimizedState, optimizedInput, plannedMode);
+  mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, dep_optimizedState, dep_optimizedInput, plannedMode);
+
+  galileo_srv_.request.time_offset_on_horizon = time;
+  if (galileo_client_.call(galileo_srv_))
+  {
+    auto state_val = srv.response.state_at_time_offset;
+    auto input_val = srv.response.input_at_time_offset;
+    optimizedState = Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, 1>>(state_val.data(), state_val.size());
+    optimizedInput = Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, 1>>(input_val.data(), input_val.size());
+  }
+  else
+  {
+      ROS_ERROR("Failed to call service get_desired_state_input");
+  }
 
   // Whole body control
   currentObservation_.input = optimizedInput;

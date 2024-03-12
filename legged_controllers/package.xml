@@ -19,6 +19,7 @@
     <depend>controller_interface</depend>
     <depend>ocs2_legged_robot_ros</depend>
     <depend>ocs2_self_collision_visualization</depend>
+    <depend>galileo_ros</depend>
 
     <depend>angles</depend>
 
