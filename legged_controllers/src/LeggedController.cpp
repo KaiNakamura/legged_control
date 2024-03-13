@@ -115,13 +115,13 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   size_t plannedMode = 0;  // The mode that is active at the time the policy is evaluated at.
   mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, dep_optimizedState, dep_optimizedInput, plannedMode);
 
-  galileo_srv_.request.time_offset_on_horizon = time;
+  galileo_srv_.request.time_offset_on_horizon = time.toSec();
   if (galileo_client_.call(galileo_srv_))
   {
-    auto state_val = srv.response.state_at_time_offset;
-    auto input_val = srv.response.input_at_time_offset;
-    optimizedState = Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, 1>>(state_val.data(), state_val.size());
-    optimizedInput = Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, 1>>(input_val.data(), input_val.size());
+    auto state_val = galileo_srv_.response.state_at_time_offset;
+    auto input_val = galileo_srv_.response.input_at_time_offset;
+    optimizedState = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(state_val.data(), state_val.size());
+    optimizedInput = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(input_val.data(), input_val.size());
   }
   else
   {
