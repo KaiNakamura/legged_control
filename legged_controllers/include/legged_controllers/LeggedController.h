@@ -19,7 +19,7 @@
 
 #include "legged_controllers/SafetyChecker.h"
 #include "legged_controllers/visualization/LeggedSelfCollisionVisualization.h"
-#include <galileo_ros/DesiredStateInputCmd.h>
+#include "galileo_ros/SolutionRequest.h"
 
 namespace legged {
 using namespace ocs2;
@@ -76,7 +76,12 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   benchmark::RepeatedTimer mpcTimer_;
   benchmark::RepeatedTimer wbcTimer_;
   ros::ServiceClient galileo_client_;
-  galileo_ros::DesiredStateInputCmd galileo_srv_;
+  galileo_ros::SolutionRequest galileo_srv_;
+  double horizon = 1.4;
+  ros::Time start_time;
+  ros::Time galileo_start_time;
+  bool first_iter = true;
+  bool galileo_first_iter = true;
 };
 
 class LeggedCheaterController : public LeggedController {

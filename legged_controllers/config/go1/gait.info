@@ -68,26 +68,20 @@ standing_trot_galileo
   {
     [0]     STANCE
     [1]     LF_RH
-    [2]     STANCE
-    [3]     RF_LH
-    [4]     STANCE
-    [5]     LF_RH
-    [6]     STANCE
-    [7]     RF_LH
-    [8]     STANCE
+    [2]     RF_LH
+    [3]     LF_RH
+    [4]     RF_LH
+    [5]     STANCE
   }
   switchingTimes
   {
     [0]     0.00
-    [1]     0.075
-    [2]     0.525
-    [3]     0.6
-    [4]     1.05
-    [5]     1.125
-    [6]     1.575
-    [7]     1.65
-    [8]     2.1
-    [9]     2.175
+    [1]     0.1
+    [2]     0.4
+    [3]     0.7
+    [4]     1.00
+    [5]     1.30
+    [6]     1.40
   }
 }
 

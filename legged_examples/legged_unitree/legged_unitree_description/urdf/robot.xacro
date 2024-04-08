@@ -2,7 +2,7 @@
 
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="robot">
 
-    <xacro:arg name="robot_type" default="a1"/>
+    <xacro:arg name="robot_type" default="go1"/>
 
     <xacro:include filename="$(find legged_unitree_description)/urdf/common/materials.xacro"/>
     <xacro:include filename="$(find legged_unitree_description)/urdf/common/leg.xacro"/>
