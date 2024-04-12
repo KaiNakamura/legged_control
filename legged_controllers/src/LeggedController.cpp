@@ -124,7 +124,7 @@ namespace legged
 
     // Evaluate the current policy
     vector_t dep_optimizedState, dep_optimizedInput, optimizedState, optimizedInput;
-    size_t plannedMode = 0; // The mode that is active at the time the policy is evaluated at.
+    size_t plannedMode = 15; // The mode that is active at the time the policy is evaluated at.
     mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, dep_optimizedState, dep_optimizedInput, plannedMode);
     // std::cout << "Current Observation: " << currentObservation_.state << std::endl;
     // std::cout << "(time - start_time).toSec(): " << (time - start_time).toSec() << std::endl;
@@ -152,6 +152,22 @@ namespace legged
         std::vector<double> input_val = {galileo_srv_.response.U_t_wrapped.begin(), galileo_srv_.response.U_t_wrapped.end()};
         optimizedState = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(state_val.data(), state_val.size());
         optimizedInput = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(input_val.data(), input_val.size());
+
+        // getting the mode number from the solution
+        std::vector<int> mode_contacts = galileo_srv_.response.contact_phases[0].mode;
+        std::vector<std::string> ee_frames = galileo_srv_.response.contact_phases[0].ee_names;
+        plannedMode = 0;
+        for(int i = 0; i < ee_frames.size(); i++){
+          if(mode_contacts[i] == -1){
+            continue;
+          }
+          std::string ee_in_contact = ee_frames[i];
+          auto ee_local_desired_it = std::find( desired_ee_frames_.begin(), desired_ee_frames_.end(), ee_in_contact);
+          if(ee_local_desired_it == desired_ee_frames_.end()){
+            int ee_local_desired_idx =  desired_ee_frames_.size() - 1 - (ee_local_desired_it - desired_ee_frames_.begin());
+            plannedMode += pow(2, ee_local_desired_idx);
+          }
+        }
       }
       else
       {
