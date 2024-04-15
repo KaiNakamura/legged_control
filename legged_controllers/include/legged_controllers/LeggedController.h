@@ -81,7 +81,7 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   ros::Time start_time;
   ros::Time galileo_start_time;
   bool first_iter = true;
-  bool galileo_first_iter = true;
+  bool new_solution_recieved = true;
 
   std::vector<std::string> desired_ee_frames_ = {"LF_FOOT", "RF_FOOT", "LH_FOOT", "RH_FOOT" }
 };

@@ -54,7 +54,8 @@ namespace legged
     // Hardware interface
     auto *hybridJointInterface = robot_hw->get<HybridJointInterface>();
     std::vector<std::string> joint_names{"LF_HAA", "LF_HFE", "LF_KFE", "LH_HAA", "LH_HFE", "LH_KFE",
-                                         "RF_HAA", "RF_HFE", "RF_KFE", "RH_HAA", "RH_HFE", "RH_KFE"};
+                                         "RF_HAA", "RF_HFE", "RF_KFE", "RH_HAA", "RH_HFE", "RH_KFE",
+                                         "base_to_link1", "j2", "j3"};
     for (const auto &joint_name : joint_names)
     {
       hybridJointHandles_.push_back(hybridJointInterface->getHandle(joint_name));
@@ -77,7 +78,7 @@ namespace legged
     // Safety Checker
     safetyChecker_ = std::make_shared<SafetyChecker>(leggedInterface_->getCentroidalModelInfo());
 
-    galileo_client_ = nh.serviceClient<galileo_ros::SolutionRequest>("galileo_go1_get_solution");
+    galileo_client_ = nh.serviceClient<galileo_ros::SolutionRequest>("biqu_go1_get_solution");
 
     return true;
   }
@@ -136,10 +137,10 @@ namespace legged
     }
     else
     {
-      if (galileo_first_iter)
+      if (new_solution_recieved)
       {
         galileo_start_time = ros::Time::now();
-        galileo_first_iter = false;
+        new_solution_recieved = false;
       }
       double elapsed_time = (time - galileo_start_time).toSec();
       elapsed_time = fmod(elapsed_time, horizon);
@@ -150,8 +151,18 @@ namespace legged
       {
         std::vector<double> state_val = {galileo_srv_.response.X_t_wrapped.begin(), galileo_srv_.response.X_t_wrapped.end()};
         std::vector<double> input_val = {galileo_srv_.response.U_t_wrapped.begin(), galileo_srv_.response.U_t_wrapped.end()};
-        optimizedState = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(state_val.data(), state_val.size());
-        optimizedInput = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(input_val.data(), input_val.size());
+
+        // Remove the last 3 elements from the state and input 
+        Eigen::VectorXd optimizedStateFull = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(state_val.data(), state_val.size());
+        Eigen::VectorXd optimizedInputFull = Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>>(input_val.data(), input_val.size());
+
+        optimizedState = optimizedStateFull; //.head(optimizedState_full.size() - 3);
+        optimizedInput = optimizedInputFull; //.head(optimizedInput_full.size() - 3);
+
+        // Eigen::VectorXd arm_q = optimizedStateFull.tail(3);
+        // Eigen::VectorXd arm_qd = optimizedInputFull.tail(3);
+
+
 
         // getting the mode number from the solution
         std::vector<int> mode_contacts = galileo_srv_.response.contact_phases[0].mode;
@@ -194,7 +205,7 @@ namespace legged
       stopRequest(time);
     }
 
-    for (size_t j = 0; j < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; ++j)
+    for (size_t j = 0; j < hybridJointHandles_.size(); ++j)
     {
       hybridJointHandles_[j].setCommand(posDes(j), velDes(j), 0, 3, torque(j));
     }
