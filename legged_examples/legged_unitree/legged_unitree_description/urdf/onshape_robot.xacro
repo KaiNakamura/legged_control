@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+    <xacro:macro name="include_onshape_robot" params="prefix">
+        <!-- Link Definitions -->
+        <link name="${prefix}base">
+            <visual>
+                <origin xyz="-0.043 -0.05625 0.05367" rpy="1.570796 0 0"/>
+                <geometry>
+                    <mesh filename="package://legged_unitree_description/urdf/arm_meshes/batterycover.stl"/>
+                </geometry>
+                <material name="batterycover_material">
+                    <color rgba="0.796 0.8235 0.93725 1.0"/>
+                </material>
+            </visual>
+            <collision>
+                <origin xyz="-0.043 -0.05625 0.05367" rpy="1.570796 0 0"/>
+                <geometry>
+                    <mesh filename="package://legged_unitree_description/urdf/arm_meshes/batterycover.stl"/>
+                </geometry>
+            </collision>
+        </link>
+
+        <!-- <link name="${prefix}link1">
+            <visual>
+                <origin xyz="-0.00543 0 -0.033" rpy="3.14159 0 0"/>
+                <geometry>
+                    <mesh filename="package://legged_unitree_description/urdf/arm_meshes/link1.stl"/>
+                </geometry>
+                <material name="link1_material">
+                    <color rgba="1 1 1 1.0"/>
+                </material>
+            </visual>
+            <collision>
+                <origin xyz="-0.00543 0 -0.033" rpy="3.14159 0 0"/>
+                <geometry>
+                    <mesh filename="package://legged_unitree_description/urdf/arm_meshes/link1.stl"/>
+                </geometry>
+            </collision>
+        </link> -->
+
+        <!-- More links can be defined similarly -->
+
+        <!-- Joint Definitions -->
+        <!-- <joint name="${prefix}base_to_link1" type="fixed">
+            <origin xyz="-0.00009 -0.00114 0.10063" rpy="3.14159 0 -0.21065"/>
+            <parent link="${prefix}base"/>
+            <child link="${prefix}link1"/>
+            <axis xyz="0 0 1"/>
+            <limit effort="1" velocity="20"/>
+        </joint> -->
+
+        <!-- More joints can be defined similarly -->
+
+    </xacro:macro>
+</robot>
