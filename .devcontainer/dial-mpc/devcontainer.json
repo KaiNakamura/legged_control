@@ -24,7 +24,7 @@
     }
   },
   "containerEnv": {
-    "DISPLAY": ":0" // WSLg's built-in display
+    "DISPLAY": "host.docker.internal:0" // Use the host's DISPLAY environment variable
   },
   "runArgs": ["--net=host", "--gpus", "all"],
   "postCreateCommand": ""
