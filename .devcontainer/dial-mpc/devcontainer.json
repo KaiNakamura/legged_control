@@ -1,0 +1,31 @@
+{
+  "name": "DIAL-MPC Development Container",
+  "privileged": true,
+  "build": {
+    "dockerfile": "../../dial-mpc.dockerfile",
+    "args": {}
+  },
+  "workspaceFolder": "/home/ws",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-vscode.cpptools-themes",
+        "twxs.cmake",
+        "donjayamanne.python-extension-pack",
+        "ms-iot.vscode-ros",
+        "charliermarsh.ruff",
+        "tomoki1207.pdf",
+        "mhutchie.git-graph"
+      ]
+    }
+  },
+  "containerEnv": {
+    "DISPLAY": ":0" // WSLg's built-in display
+  },
+  "runArgs": ["--net=host", "--gpus", "all"],
+  "postCreateCommand": ""
+}

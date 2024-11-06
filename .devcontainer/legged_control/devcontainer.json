@@ -1,0 +1,29 @@
+{
+  "name": "Legged Control Development Container",
+  "privileged": true,
+  "build": {
+    "dockerfile": "../../legged_control.dockerfile",
+    "args": {
+      "HSL_PATH": "coinhsl-2024.05.15"
+    }
+  },
+  "workspaceFolder": "/home/ws",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-themes",
+        "twxs.cmake",
+        "ms-iot.vscode-ros",
+        "mhutchie.git-graph"
+      ]
+    }
+  },
+  "containerEnv": {
+    "DISPLAY": "host.docker.internal:0" // Use the host's DISPLAY environment variable
+  },
+  "mounts": [
+    "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached" // Retain for hardware acceleration
+  ]
+}
