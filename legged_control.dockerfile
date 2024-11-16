@@ -186,6 +186,74 @@ RUN /bin/bash -c "cd $CATKIN_WS && \
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
 RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
 
+RUN apt-get install -y --no-install-recommends \
+    coinor-libipopt-dev \
+    libncurses5-dev \
+    ros-noetic-xpp \
+    ros-noetic-pybind11-catkin \
+    rsync \
+    libmpfr-dev \
+    libgmp-dev
+
+# Clone Raisim
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/raisimTech/raisimlib.git
+
+ENV raisim_DIR=/home/catkin_ws/src/raisimlib/raisim/linux/lib/cmake/raisim
+ENV LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:\$CATKIN_WS/src/raisimlib/raisim/linux/lib
+ENV PYTHONPATH=\$PYTHONPATH:\$CATKIN_WS/src/raisimlib/raisim/linux/lib
+# RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:\$CATKIN_WS/src/raisimlib/raisim/linux/lib" >> /root/.bashrc
+# RUN echo "export PYTHONPATH=\$PYTHONPATH:\$CATKIN_WS/src/raisimlib/raisim/linux/lib" >> /root/.bashrc
+# RUN source /root/.bashrc
+
+# Install ONNX Runtime
+RUN cd /tmp && \
+    wget https://github.com/microsoft/onnxruntime/releases/download/v1.7.0/onnxruntime-linux-x64-1.7.0.tgz && \
+    tar xf onnxruntime-linux-x64-1.7.0.tgz && \
+    mkdir -p ~/.local/bin ~/.local/include/onnxruntime ~/.local/lib ~/.local/share/cmake/onnxruntime && \
+    rsync -a /tmp/onnxruntime-linux-x64-1.7.0/include/ ~/.local/include/onnxruntime && \
+    rsync -a /tmp/onnxruntime-linux-x64-1.7.0/lib/ ~/.local/lib && \
+    rsync -a /home/$CATKIN_WS/src/ocs2/ocs2_mpcnet/ocs2_mpcnet_core/misc/onnxruntime/cmake/ ~/.local/share/cmake/onnxruntime
+
+ENV onnxruntime_DIR=~/.local/share/cmake/onnxruntime
+
+# Clone grid_map
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ANYbotics/grid_map.git
+
+# Clone elevation_mapping_cupy
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/leggedrobotics/elevation_mapping_cupy.git
+
+# Install dependencies
+RUN cd $CATKIN_WS && \
+    rosdep install --from-path src --ignore-src -ry
+
+RUN apt-get install -y --no-install-recommends \
+    portaudio19-dev \
+    python3-pip
+
+# Install sphinx
+RUN pip install sphinx breathe sphinxcontrib-bibtex sphinx-rtd-theme
+
+# Install ifopt
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ethz-adrl/ifopt.git
+
+# Install towr
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ethz-adrl/towr.git
+
+# RUN /bin/bash -c "cd $CATKIN_WS && \
+#     source /opt/ros/$ROS_DISTRO/setup.sh && \
+#     catkin init && \
+#     catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+#     catkin build && \
+#     source devel/setup.bash"
+
+# RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
+# RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
+
 # roslaunch ocs2_legged_robot_ros legged_robot_ddp.launch
 # roslaunch ocs2_legged_robot_ros legged_robot_sqp.launch
 
