@@ -176,15 +176,15 @@ RUN cd $CATKIN_WS/src && \
 RUN cd $CATKIN_WS/src && \
     git clone https://github.com/leggedrobotics/ocs2_robotic_assets.git
 
-RUN /bin/bash -c "cd $CATKIN_WS && \
-    source /opt/ros/$ROS_DISTRO/setup.sh && \
-    catkin init && \
-    catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-    catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization && \
-    source devel/setup.bash"
+# RUN /bin/bash -c "cd $CATKIN_WS && \
+#     source /opt/ros/$ROS_DISTRO/setup.sh && \
+#     catkin init && \
+#     catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+#     catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization && \
+#     source devel/setup.bash"
 
-RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
-RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
+# RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
+# RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
 
 RUN apt-get install -y --no-install-recommends \
     coinor-libipopt-dev \
@@ -242,17 +242,17 @@ RUN cd $CATKIN_WS/src && \
 
 # Install towr
 RUN cd $CATKIN_WS/src && \
-    git clone https://github.com/ethz-adrl/towr.git
+    git clone https://github.com/KaiNakamura/towr.git
 
-# RUN /bin/bash -c "cd $CATKIN_WS && \
-#     source /opt/ros/$ROS_DISTRO/setup.sh && \
-#     catkin init && \
-#     catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-#     catkin build && \
-#     source devel/setup.bash"
+RUN /bin/bash -c "cd $CATKIN_WS && \
+    source /opt/ros/$ROS_DISTRO/setup.sh && \
+    catkin init && \
+    catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+    catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization towr_ros && \
+    source devel/setup.bash"
 
-# RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
-# RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
+RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
 
 # roslaunch ocs2_legged_robot_ros legged_robot_ddp.launch
 # roslaunch ocs2_legged_robot_ros legged_robot_sqp.launch
