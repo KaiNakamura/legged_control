@@ -20,6 +20,8 @@
 #include "legged_controllers/SafetyChecker.h"
 #include "legged_controllers/visualization/LeggedSelfCollisionVisualization.h"
 
+#include <legged_estimation/ContactEstimate.h>
+
 namespace legged {
 using namespace ocs2;
 using namespace legged_robot;
@@ -54,6 +56,7 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   SystemObservation currentObservation_;
   vector_t measuredRbdState_;
   std::shared_ptr<StateEstimateBase> stateEstimate_;
+  std::shared_ptr<ContactEstimate> contactEstimate_;
   std::shared_ptr<CentroidalModelRbdConversions> rbdConversions_;
 
   // Whole Body Control

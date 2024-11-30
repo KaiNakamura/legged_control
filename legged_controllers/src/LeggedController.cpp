@@ -116,6 +116,8 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   // Whole body control
   currentObservation_.input = optimizedInput;
 
+  currentObservation_.input = contactEstimate_->update(time, period, measuredRbdState_, optimizedInput);
+
   wbcTimer_.startTimer();
   vector_t x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, plannedMode, period.toSec());
   wbcTimer_.endTimer();
@@ -254,12 +256,18 @@ void LeggedController::setupStateEstimate(const std::string& taskFile, bool verb
   stateEstimate_ = std::make_shared<KalmanFilterEstimate>(leggedInterface_->getPinocchioInterface(),
                                                           leggedInterface_->getCentroidalModelInfo(), *eeKinematicsPtr_);
   dynamic_cast<KalmanFilterEstimate&>(*stateEstimate_).loadSettings(taskFile, verbose);
+
+  contactEstimate_ = std::make_shared<ContactEstimate>(leggedInterface_->getPinocchioInterface(),
+                                                          leggedInterface_->getCentroidalModelInfo(), *eeKinematicsPtr_);
   currentObservation_.time = 0;
 }
 
 void LeggedCheaterController::setupStateEstimate(const std::string& /*taskFile*/, bool /*verbose*/) {
   stateEstimate_ = std::make_shared<FromTopicStateEstimate>(leggedInterface_->getPinocchioInterface(),
                                                             leggedInterface_->getCentroidalModelInfo(), *eeKinematicsPtr_);
+
+  contactEstimate_ = std::make_shared<ContactEstimate>(leggedInterface_->getPinocchioInterface(),
+                                                        leggedInterface_->getCentroidalModelInfo(), *eeKinematicsPtr_);
 }
 
 }  // namespace legged

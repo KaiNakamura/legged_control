@@ -48,6 +48,7 @@ add_library(${PROJECT_NAME}
         src/StateEstimateBase.cpp
         src/FromTopicEstimate.cpp
         src/LinearKalmanFilter.cpp
+        src/ContactEstimate.cpp
         )
 
 target_link_libraries(${PROJECT_NAME}
