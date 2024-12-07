@@ -91,7 +91,7 @@ void WbcBase::updateDesired(const vector_t& stateDesired, const vector_t& inputD
   pinocchio::updateFramePlacements(model, data);
   updateCentroidalDynamics(pinocchioInterfaceDesired_, info_, qDesired);
   const vector_t vDesired = mapping_.getPinocchioJointVelocity(stateDesired, inputDesired);
-  pinocchio::forwardKinematics(model, data, qDesired, vDesired);
+  pinocchio::forwardKinematics(model, data, qDesired,  vDesired);
 }
 
 Task WbcBase::formulateFloatingBaseEomTask() {

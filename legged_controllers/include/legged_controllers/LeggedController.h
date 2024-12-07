@@ -52,12 +52,23 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   std::vector<ContactSensorHandle> contactHandles_;
   hardware_interface::ImuSensorHandle imuSensorHandle_;
 
+  ros::Publisher leg1_contact_force_pub;
+  ros::Publisher leg2_contact_force_pub;
+  ros::Publisher leg3_contact_force_pub;
+  ros::Publisher leg4_contact_force_pub;
+
+  std_msgs::Int16 leg1_contact_force;
+  std_msgs::Int16 leg2_contact_force;
+  std_msgs::Int16 leg3_contact_force;
+  std_msgs::Int16 leg4_contact_force;
+
   // State Estimation
   SystemObservation currentObservation_;
   vector_t measuredRbdState_;
   std::shared_ptr<StateEstimateBase> stateEstimate_;
   std::shared_ptr<ContactEstimate> contactEstimate_;
   std::shared_ptr<CentroidalModelRbdConversions> rbdConversions_;
+  contact_flag_t contactFlag;
 
   // Whole Body Control
   std::shared_ptr<WbcBase> wbc_;

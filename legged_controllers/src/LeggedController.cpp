@@ -116,13 +116,27 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   // Whole body control
   currentObservation_.input = optimizedInput;
 
-  currentObservation_.input = contactEstimate_->update(time, period, measuredRbdState_, optimizedInput);
-
   wbcTimer_.startTimer();
-  vector_t x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, plannedMode, period.toSec());
+  vector_t x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, currentObservation_.mode, period.toSec());
   wbcTimer_.endTimer();
 
   vector_t torque = x.tail(12);
+  size_t updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, contactFlag, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
+  
+  leg1_contact_force.data = contactFlag[0];
+  leg2_contact_force.data = contactFlag[1];
+  leg3_contact_force.data = contactFlag[2];
+  leg4_contact_force.data = contactFlag[3];
+
+  leg1_contact_force_pub.publish(leg1_contact_force);
+  leg2_contact_force_pub.publish(leg2_contact_force);
+  leg3_contact_force_pub.publish(leg3_contact_force);
+  leg4_contact_force_pub.publish(leg4_contact_force);
+
+  // std::cout << "planned mode: " << plannedMode << std::endl;
+  // std::cout << "force sensors mode: " << currentObservation_.mode << std::endl;
+  // std::cout << "updated mode: " << updatedMode << std::endl;
+  // std::cout << "actual mode: " << mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_.modeAtTime(currentObservation_.time) << std::endl;
 
   vector_t posDes = centroidal_model::getJointAngles(optimizedState, leggedInterface_->getCentroidalModelInfo());
   vector_t velDes = centroidal_model::getJointVelocities(optimizedInput, leggedInterface_->getCentroidalModelInfo());
@@ -149,7 +163,6 @@ void LeggedController::updateStateEstimation(const ros::Time& time, const ros::D
   vector_t jointPos(hybridJointHandles_.size()), jointVel(hybridJointHandles_.size());
   contact_flag_t contacts;
   Eigen::Quaternion<scalar_t> quat;
-  contact_flag_t contactFlag;
   vector3_t angularVel, linearAccel;
   matrix3_t orientationCovariance, angularVelCovariance, linearAccelCovariance;
 
@@ -222,6 +235,11 @@ void LeggedController::setupMpc() {
   mpc_->getSolverPtr()->addSynchronizedModule(gaitReceiverPtr);
   mpc_->getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);
   observationPublisher_ = nh.advertise<ocs2_msgs::mpc_observation>(robotName + "_mpc_observation", 1);
+
+  leg1_contact_force_pub = nh.advertise<std_msgs::Int16>("leg1_contact_force", 10);
+  leg2_contact_force_pub = nh.advertise<std_msgs::Int16>("leg2_contact_force", 10);
+  leg3_contact_force_pub = nh.advertise<std_msgs::Int16>("leg3_contact_force", 10);
+  leg4_contact_force_pub = nh.advertise<std_msgs::Int16>("leg4_contact_force", 10);
 }
 
 void LeggedController::setupMrt() {
