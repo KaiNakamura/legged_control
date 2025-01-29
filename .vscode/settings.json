@@ -1,0 +1,12 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "$PYTHONPATH",
+        "$CATKIN_WS/src/raisimlib/raisim/linux/lib"
+    ],
+    "python.analysis.extraPaths": [
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "$PYTHONPATH",
+        "$CATKIN_WS/src/raisimlib/raisim/linux/lib"
+    ]
+}

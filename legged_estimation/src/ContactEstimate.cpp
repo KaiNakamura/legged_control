@@ -52,6 +52,10 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg2_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg2_contact_prob", 10);
   leg3_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg3_contact_prob", 10);
   leg4_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg4_contact_prob", 10);
+
+  leg1_contact_prob_force_pub = nh.advertise<std_msgs::Float64>("leg1_contact_force_prob", 10);
+  leg1_contact_prob_time_pub = nh.advertise<std_msgs::Float64>("leg1_contact_time_prob", 10);
+  leg1_contact_prob_height_pub = nh.advertise<std_msgs::Float64>("leg1_contact_height_prob", 10);
 }
 
 size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
@@ -141,7 +145,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   // std::cout << "JT: " << std::endl << j_.transpose() << std::endl;
   // std::cout << "ST: " << std::endl << ST << std::endl;
 
-  // std::cout << "estimated force: " << std::endl << force_estimated.transpose() << std::endl;
+  std::cout << "estimated force: " << std::endl << force_estimated.transpose() << std::endl;
   // std::cout << "applied force: " << std::endl << input.head(3*info_.numThreeDofContacts).transpose() << std::endl;
   
   // std::cout << "contactFlag: ";
@@ -189,7 +193,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
 
   Eigen::MatrixXd contact_probability_height = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
-    contact_probability_height(i) = calculateContactProbabilityFootHeight(footPos[i](2));
+    contact_probability_height(i) = calculateContactProbabilityFootHeight(footPos[i](2), i);
   }
   // std::cout << "contact probability foot height: " << std::endl << contact_probability_height.transpose() << std::endl;
 
@@ -214,17 +218,19 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   sigma_vk.block(info_.numThreeDofContacts, 0, info_.numThreeDofContacts, info_.numThreeDofContacts) = Eigen::MatrixXd::Zero(info_.numThreeDofContacts, info_.numThreeDofContacts);
   sigma_vk.block(0, info_.numThreeDofContacts, info_.numThreeDofContacts, info_.numThreeDofContacts) = Eigen::MatrixXd::Zero(info_.numThreeDofContacts, info_.numThreeDofContacts);
 
-  K = contact_variance_time * H.transpose() * (H*contact_variance_time*H.transpose() + sigma_vk);
+  K = contact_variance_time * H.transpose() * (H*contact_variance_time*H.transpose() + sigma_vk).completeOrthogonalDecomposition().pseudoInverse();
   Eigen::MatrixXd contact_probability_overall = contact_probability_time + K*(z - H*contact_probability_time);
   Eigen::MatrixXd contact_variance_overall = (Eigen::MatrixXd::Identity(2*info_.numThreeDofContacts, 2*info_.numThreeDofContacts) - K*H) * contact_variance_time;
 
   std::cout << "Overall contact probability: " << std::endl << contact_probability_overall.transpose() << std::endl;
+  // std::cout << "mean foot height 1: " << mean_zg[0] << std::endl;
   // std::cout << "Overall contact variance: " << std::endl << contact_variance_overall.transpose() << std::endl;
 
   int mode_detected = 0;
   for(int i = 0; i < info_.numThreeDofContacts; i++){
     if(contact_probability_overall(i) > contact_likelihood_cutoff){
       mode_detected += (int) pow(2, i);
+      // mean_zg[i] = footPos[i](2) + 0.05;
     }
   }
 
@@ -239,6 +245,11 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg3_contact_prob.data = contact_probability_overall(2);
   leg4_contact_prob.data = contact_probability_overall(3);
 
+  leg1_contact_prob_force.data = contact_probability_force(0);
+  leg1_contact_prob_height.data = contact_probability_height(0);
+  leg1_contact_prob_time.data = contact_probability_time(0);
+
+
   // Publish ros msgs
   leg1_contact_pub.publish(leg1_contact);
   leg2_contact_pub.publish(leg2_contact);
@@ -250,16 +261,20 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg3_contact_prob_pub.publish(leg3_contact_prob);
   leg4_contact_prob_pub.publish(leg4_contact_prob);
 
+  leg1_contact_prob_time_pub.publish(leg1_contact_prob_time);
+  leg1_contact_prob_height_pub.publish(leg1_contact_prob_height);
+  leg1_contact_prob_force_pub.publish(leg1_contact_prob_force);
+
   return mode_detected;
 }
 
 double ContactEstimate::calculateContactProbabilityTime(double phase_switch, double phase_timer){
   return 0.5 * (phase_switch * (erf((phase_timer - mean_c0)/(variance_c0*sqrt(2))) + erf((mean_c1 - phase_timer)/(variance_c1*sqrt(2)))) + 
-               (1 - phase_switch) * (2 + erf((mean_not_c0 - phase_timer)/(variance_not_c0*sqrt(2))) + erf((phase_timer - mean_not_c1)/(variance_not_c1*sqrt(2)))));
+               (1 - phase_switch) * 0.5*(2 + erf((mean_not_c0 - phase_timer)/(variance_not_c0*sqrt(2))) + erf((phase_timer - mean_not_c1)/(variance_not_c1*sqrt(2)))));
 }
 
-double ContactEstimate::calculateContactProbabilityFootHeight(double foot_height){
-  return 0.5 * (1 + erf((mean_zg - foot_height)/(variance_zg*sqrt(2))));
+double ContactEstimate::calculateContactProbabilityFootHeight(double foot_height, int leg){
+  return 0.5 * (1 + erf((mean_zg[leg] - foot_height)/(variance_zg*sqrt(2))));
 }
 
 double ContactEstimate::calculateContactProbabilityFootForce(double foot_force){

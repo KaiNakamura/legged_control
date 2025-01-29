@@ -35,7 +35,7 @@ class ContactEstimate{
  protected:
   void updateFromTopic();
   double calculateContactProbabilityTime(double phase_switch, double phase_timer);
-  double calculateContactProbabilityFootHeight(double foot_height);
+  double calculateContactProbabilityFootHeight(double foot_height, int leg);
   double calculateContactProbabilityFootForce(double foot_force);
 
   PinocchioInterface pinocchioInterface_;
@@ -67,8 +67,8 @@ class ContactEstimate{
   double variance_c1 = 0.05;
 
   // Note: these can be updated based on other sensors (vision) and historical footsteps
-  double mean_zg = 0;
-  double variance_zg = 0.1;
+  double mean_zg[4] = {0, 0, 0, 0};
+  double variance_zg = 0.025;
 
   double mean_force = 40;
   double variance_force = 25;
@@ -85,6 +85,10 @@ class ContactEstimate{
   ros::Publisher leg3_contact_prob_pub;
   ros::Publisher leg4_contact_prob_pub;
 
+  ros::Publisher leg1_contact_prob_time_pub;
+  ros::Publisher leg1_contact_prob_force_pub;
+  ros::Publisher leg1_contact_prob_height_pub;
+
   std_msgs::Int16 leg1_contact;
   std_msgs::Int16 leg2_contact;
   std_msgs::Int16 leg3_contact;
@@ -94,6 +98,10 @@ class ContactEstimate{
   std_msgs::Float64 leg2_contact_prob;
   std_msgs::Float64 leg3_contact_prob;
   std_msgs::Float64 leg4_contact_prob;
+
+  std_msgs::Float64 leg1_contact_prob_time;
+  std_msgs::Float64 leg1_contact_prob_force;
+  std_msgs::Float64 leg1_contact_prob_height;
 
  private:
   // Topic

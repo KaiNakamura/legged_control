@@ -83,6 +83,8 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   std::shared_ptr<LeggedSelfCollisionVisualization> selfCollisionVisualization_;
   ros::Publisher observationPublisher_;
 
+  size_t updatedMode;
+
  private:
   std::thread mpcThread_;
   std::atomic_bool controllerRunning_{}, mpcRunning_{};
