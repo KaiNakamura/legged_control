@@ -153,7 +153,7 @@ RUN mkdir repos
 
 # Clone OCS2
 RUN cd $CATKIN_WS/src && \
-    git clone https://github.com/leggedrobotics/ocs2.git
+    git clone https://github.com/JaredMorgan21/ocs2.git
 
 # Eigen 3.3.9
 RUN cd repos && \
@@ -244,12 +244,12 @@ RUN cd $CATKIN_WS/src && \
 RUN cd $CATKIN_WS/src && \
     git clone https://github.com/KaiNakamura/towr.git
 
-# RUN /bin/bash -c "cd $CATKIN_WS && \
-#     source /opt/ros/$ROS_DISTRO/setup.sh && \
-#     catkin init && \
-#     catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-#     catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization towr_ros && \
-#     source devel/setup.bash"
+RUN /bin/bash -c "cd $CATKIN_WS && \
+    source /opt/ros/$ROS_DISTRO/setup.sh && \
+    catkin init && \
+    catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+    catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization towr_ros && \
+    source devel/setup.bash"
 
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc
 RUN echo "source /home/$CATKIN_WS/devel/setup.bash" >> /root/.bashrc
