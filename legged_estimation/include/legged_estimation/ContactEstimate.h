@@ -19,6 +19,7 @@
 
 #include "std_msgs/Int16.h"
 #include "std_msgs/Float64.h"
+#include <sensor_msgs/JointState.h>
 
 namespace legged {
 using namespace ocs2;
@@ -37,6 +38,9 @@ class ContactEstimate{
   double calculateContactProbabilityTime(double phase_switch, double phase_timer);
   double calculateContactProbabilityFootHeight(double foot_height, int leg);
   double calculateContactProbabilityFootForce(double foot_force);
+  double calculateContactProbabilityForceSensor(double foot_force);
+  void getForceReadings(const sensor_msgs::JointState msg);
+  Eigen::MatrixXd KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
 
   PinocchioInterface pinocchioInterface_;
   CentroidalModelInfo info_;
@@ -67,13 +71,22 @@ class ContactEstimate{
   double variance_c1 = 0.05;
 
   // Note: these can be updated based on other sensors (vision) and historical footsteps
-  double mean_zg[4] = {0, 0, 0, 0};
-  double variance_zg = 0.025;
+  // Note: Replace 4 with num legs from somewhere
+  double mean_zg[4] = {0.02, 0.02, 0.02, 0.02};
+  double variance_zg = 0.075;
 
-  double mean_force = 40;
-  double variance_force = 25;
+  double force_sensor_readings[4] = {-1, -1, -1, -1};
+  bool force_sensor_read = false;
 
-  double contact_likelihood_cutoff = 0.35;
+  double mean_force = 30;
+  double variance_force = 15;
+
+  double contact_likelihood_cutoff = 0.6;
+  double contact_loss_likelihood_cutoff = 0.4;
+  bool contact[4] = {false, false, false, false};
+
+  double mean_force_sensor = 80;
+  double variance_force_sensor = 40;
 
   ros::Publisher leg1_contact_pub;
   ros::Publisher leg2_contact_pub;
@@ -85,9 +98,17 @@ class ContactEstimate{
   ros::Publisher leg3_contact_prob_pub;
   ros::Publisher leg4_contact_prob_pub;
 
+  ros::Publisher leg1_force_pub;
+  ros::Publisher leg2_force_pub;
+  ros::Publisher leg3_force_pub;
+  ros::Publisher leg4_force_pub;
+
   ros::Publisher leg1_contact_prob_time_pub;
   ros::Publisher leg1_contact_prob_force_pub;
   ros::Publisher leg1_contact_prob_height_pub;
+  ros::Publisher leg1_contact_prob_force_sensors_pub;
+
+  ros::Publisher leg1_height_pub;
 
   std_msgs::Int16 leg1_contact;
   std_msgs::Int16 leg2_contact;
@@ -102,6 +123,16 @@ class ContactEstimate{
   std_msgs::Float64 leg1_contact_prob_time;
   std_msgs::Float64 leg1_contact_prob_force;
   std_msgs::Float64 leg1_contact_prob_height;
+  std_msgs::Float64 leg1_contact_prob_force_sensors;
+
+  std_msgs::Float64 leg1_height;
+
+  std_msgs::Float64 leg1_force;
+  std_msgs::Float64 leg2_force;
+  std_msgs::Float64 leg3_force;
+  std_msgs::Float64 leg4_force;
+
+  ros::Subscriber joint_state_sub;
 
  private:
   // Topic

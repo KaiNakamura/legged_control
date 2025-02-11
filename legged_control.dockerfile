@@ -248,7 +248,7 @@ RUN /bin/bash -c "cd $CATKIN_WS && \
     source /opt/ros/$ROS_DISTRO/setup.sh && \
     catkin init && \
     catkin config -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-    catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization towr_ros && \
+    catkin build ocs2_legged_robot_ros ocs2_self_collision_visualization && \
     source devel/setup.bash"
 
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.sh" >> /root/.bashrc

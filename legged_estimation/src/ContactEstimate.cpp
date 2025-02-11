@@ -43,19 +43,28 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
 
   ros::NodeHandle nh;
 
-  leg1_contact_pub = nh.advertise<std_msgs::Int16>("leg1_contact", 10);
-  leg2_contact_pub = nh.advertise<std_msgs::Int16>("leg2_contact", 10);
-  leg3_contact_pub = nh.advertise<std_msgs::Int16>("leg3_contact", 10);
-  leg4_contact_pub = nh.advertise<std_msgs::Int16>("leg4_contact", 10);
+  leg1_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg1_contact", 10);
+  leg2_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg2_contact", 10);
+  leg3_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg3_contact", 10);
+  leg4_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg4_contact", 10);
 
-  leg1_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg1_contact_prob", 10);
-  leg2_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg2_contact_prob", 10);
-  leg3_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg3_contact_prob", 10);
-  leg4_contact_prob_pub = nh.advertise<std_msgs::Float64>("leg4_contact_prob", 10);
+  leg1_contact_prob_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_prob", 10);
+  leg2_contact_prob_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg2_contact_prob", 10);
+  leg3_contact_prob_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg3_contact_prob", 10);
+  leg4_contact_prob_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_contact_prob", 10);
 
-  leg1_contact_prob_force_pub = nh.advertise<std_msgs::Float64>("leg1_contact_force_prob", 10);
-  leg1_contact_prob_time_pub = nh.advertise<std_msgs::Float64>("leg1_contact_time_prob", 10);
-  leg1_contact_prob_height_pub = nh.advertise<std_msgs::Float64>("leg1_contact_height_prob", 10);
+  leg1_contact_prob_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_force_prob", 10);
+  leg1_contact_prob_time_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_time_prob", 10);
+  leg1_contact_prob_height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_height_prob", 10);
+  leg1_contact_prob_force_sensors_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_force_sensors_prob", 10);
+  leg1_height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_height", 10);
+
+  leg1_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_force", 10);
+  leg2_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg2_force", 10);
+  leg3_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg3_force", 10);
+  leg4_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_force", 10);
+
+  joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 10, &ContactEstimate::getForceReadings, this);
 }
 
 size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
@@ -145,7 +154,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   // std::cout << "JT: " << std::endl << j_.transpose() << std::endl;
   // std::cout << "ST: " << std::endl << ST << std::endl;
 
-  std::cout << "estimated force: " << std::endl << force_estimated.transpose() << std::endl;
+  // std::cout << "estimated force: " << std::endl << force_estimated.transpose() << std::endl;
   // std::cout << "applied force: " << std::endl << input.head(3*info_.numThreeDofContacts).transpose() << std::endl;
   
   // std::cout << "contactFlag: ";
@@ -201,44 +210,57 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   for(int i = 0; i < info_.numThreeDofContacts; i++){
     contact_probability_force(i) = calculateContactProbabilityFootForce(force_estimated(2 + 3*i));
   }
+
+  Eigen::MatrixXd contact_probability_force_sensors = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
+  for(int i = 0; i < info_.numThreeDofContacts; i++){
+    contact_probability_force_sensors(i) = calculateContactProbabilityForceSensor(force_sensor_readings[i]);
+  }
+
+  Eigen::MatrixXd contact_probability_overall = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
+  if(force_sensor_read){
+    Eigen::MatrixXd correction_probabilities = Eigen::MatrixXd(3*info_.numThreeDofContacts, 1);
+    Eigen::MatrixXd correction_variances = Eigen::MatrixXd(3, 1);
+    correction_probabilities << contact_probability_height, contact_probability_force, contact_probability_force_sensors;
+    correction_variances << variance_zg, variance_force, variance_force_sensor;
+
+    contact_probability_overall = KalmanCorrection(3, correction_variances, correction_probabilities, contact_variance_time, contact_probability_time, info_.numThreeDofContacts);
+  }
+  else{
+    Eigen::MatrixXd correction_probabilities = Eigen::MatrixXd(2*info_.numThreeDofContacts, 1);
+    Eigen::MatrixXd correction_variances = Eigen::MatrixXd(2, 1);
+    correction_probabilities << contact_probability_height, contact_probability_force;
+    correction_variances << variance_zg, variance_force;
+
+    contact_probability_overall = KalmanCorrection(2, correction_variances, correction_probabilities, contact_variance_time, contact_probability_time, info_.numThreeDofContacts);
+  }
   // std::cout << "contact probability force: " << std::endl << contact_probability_force.transpose() << std::endl;
 
-  Eigen::MatrixXd z = Eigen::MatrixXd(2 * info_.numThreeDofContacts, 1);
-  Eigen::MatrixXd K = Eigen::MatrixXd(2 * info_.numThreeDofContacts, 2 * info_.numThreeDofContacts);
-  Eigen::MatrixXd H = Eigen::MatrixXd(2 * info_.numThreeDofContacts, info_.numThreeDofContacts);
-
-  H.block(0, 0, info_.numThreeDofContacts, info_.numThreeDofContacts) = Eigen::MatrixXd::Identity(info_.numThreeDofContacts, info_.numThreeDofContacts);
-  H.block(info_.numThreeDofContacts, 0, info_.numThreeDofContacts, info_.numThreeDofContacts) = Eigen::MatrixXd::Identity(info_.numThreeDofContacts, info_.numThreeDofContacts);
-
-  z << contact_probability_height, contact_probability_force;
-
-  Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> sigma_vk = Eigen::MatrixXd(2 * info_.numThreeDofContacts, 2 * info_.numThreeDofContacts);
-  sigma_vk.block(0, 0, info_.numThreeDofContacts, info_.numThreeDofContacts) = variance_zg * Eigen::MatrixXd::Identity(info_.numThreeDofContacts, info_.numThreeDofContacts);
-  sigma_vk.block(info_.numThreeDofContacts, info_.numThreeDofContacts, info_.numThreeDofContacts, info_.numThreeDofContacts) = variance_force * Eigen::MatrixXd::Identity(info_.numThreeDofContacts, info_.numThreeDofContacts);
-  sigma_vk.block(info_.numThreeDofContacts, 0, info_.numThreeDofContacts, info_.numThreeDofContacts) = Eigen::MatrixXd::Zero(info_.numThreeDofContacts, info_.numThreeDofContacts);
-  sigma_vk.block(0, info_.numThreeDofContacts, info_.numThreeDofContacts, info_.numThreeDofContacts) = Eigen::MatrixXd::Zero(info_.numThreeDofContacts, info_.numThreeDofContacts);
-
-  K = contact_variance_time * H.transpose() * (H*contact_variance_time*H.transpose() + sigma_vk).completeOrthogonalDecomposition().pseudoInverse();
-  Eigen::MatrixXd contact_probability_overall = contact_probability_time + K*(z - H*contact_probability_time);
-  Eigen::MatrixXd contact_variance_overall = (Eigen::MatrixXd::Identity(2*info_.numThreeDofContacts, 2*info_.numThreeDofContacts) - K*H) * contact_variance_time;
-
-  std::cout << "Overall contact probability: " << std::endl << contact_probability_overall.transpose() << std::endl;
+  // std::cout << "Overall contact probability: " << std::endl << contact_probability_overall.transpose() << std::endl;
   // std::cout << "mean foot height 1: " << mean_zg[0] << std::endl;
   // std::cout << "Overall contact variance: " << std::endl << contact_variance_overall.transpose() << std::endl;
 
+  for(int i = 0; i < info_.numThreeDofContacts; i++){
+    if(contact[i]){
+      contact[i] = contact_probability_overall(i) > contact_loss_likelihood_cutoff;
+    }
+    else{
+      contact[i] = contact_probability_overall(i) > contact_likelihood_cutoff;
+    }
+  }
+
   int mode_detected = 0;
   for(int i = 0; i < info_.numThreeDofContacts; i++){
-    if(contact_probability_overall(i) > contact_likelihood_cutoff){
+    if(contact[i]){
       mode_detected += (int) pow(2, i);
       // mean_zg[i] = footPos[i](2) + 0.05;
     }
   }
 
   // Fill ros msgs
-  leg1_contact.data = contact_probability_overall(0) > contact_likelihood_cutoff ? 1:0;
-  leg2_contact.data = contact_probability_overall(1) > contact_likelihood_cutoff ? 1:0;
-  leg3_contact.data = contact_probability_overall(2) > contact_likelihood_cutoff ? 1:0;
-  leg4_contact.data = contact_probability_overall(3) > contact_likelihood_cutoff ? 1:0;
+  leg1_contact.data = contact[0];
+  leg2_contact.data = contact[1];
+  leg3_contact.data = contact[2];
+  leg4_contact.data = contact[3];
 
   leg1_contact_prob.data = contact_probability_overall(0);
   leg2_contact_prob.data = contact_probability_overall(1);
@@ -248,7 +270,14 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg1_contact_prob_force.data = contact_probability_force(0);
   leg1_contact_prob_height.data = contact_probability_height(0);
   leg1_contact_prob_time.data = contact_probability_time(0);
+  leg1_contact_prob_force_sensors.data = contact_probability_force_sensors(0);
 
+  leg1_force.data = force_sensor_readings[0];
+  leg2_force.data = force_sensor_readings[1];
+  leg3_force.data = force_sensor_readings[2];
+  leg4_force.data = force_sensor_readings[3];
+
+  leg1_height.data = footPos[0][2];
 
   // Publish ros msgs
   leg1_contact_pub.publish(leg1_contact);
@@ -264,6 +293,15 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg1_contact_prob_time_pub.publish(leg1_contact_prob_time);
   leg1_contact_prob_height_pub.publish(leg1_contact_prob_height);
   leg1_contact_prob_force_pub.publish(leg1_contact_prob_force);
+  leg1_contact_prob_force_sensors_pub.publish(leg1_contact_prob_force_sensors);
+
+
+  leg1_force_pub.publish(leg1_force);
+  leg2_force_pub.publish(leg2_force);
+  leg3_force_pub.publish(leg3_force);
+  leg4_force_pub.publish(leg4_force);
+
+  leg1_height_pub.publish(leg1_height);
 
   return mode_detected;
 }
@@ -279,5 +317,40 @@ double ContactEstimate::calculateContactProbabilityFootHeight(double foot_height
 
 double ContactEstimate::calculateContactProbabilityFootForce(double foot_force){
   return 0.5 * (1 + erf((foot_force - mean_force)/(variance_force*sqrt(2))));
+}
+
+double ContactEstimate::calculateContactProbabilityForceSensor(double foot_force){
+  return 0.5 * (1 + erf((foot_force - mean_force_sensor)/(variance_force_sensor*sqrt(2))));
+}
+
+void ContactEstimate::getForceReadings(const sensor_msgs::JointState msg){
+  // Note again replace 4 with numlegs and 12 with numdof
+  for(int i = 0; i < 4; i++){
+    force_sensor_readings[i] = msg.effort[12 + i];
+  }
+  force_sensor_read = true;
+}
+
+Eigen::MatrixXd ContactEstimate::KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts){
+  Eigen::MatrixXd z = Eigen::MatrixXd(nReadings * numThreeDofContacts, 1);
+  Eigen::MatrixXd K = Eigen::MatrixXd(nReadings * numThreeDofContacts, nReadings * numThreeDofContacts);
+  Eigen::MatrixXd H = Eigen::MatrixXd(nReadings * numThreeDofContacts, numThreeDofContacts);
+  Eigen::MatrixXd sigma_vk = Eigen::MatrixXd::Zero(nReadings * numThreeDofContacts, nReadings * numThreeDofContacts);
+
+  for(int i = 0; i < nReadings; i++){
+    H.block(i*numThreeDofContacts, 0, numThreeDofContacts, numThreeDofContacts) = Eigen::MatrixXd::Identity(numThreeDofContacts, numThreeDofContacts);
+    sigma_vk.block(i*numThreeDofContacts, i*numThreeDofContacts, numThreeDofContacts, numThreeDofContacts) = correction_variances(i) * Eigen::MatrixXd::Identity(numThreeDofContacts, numThreeDofContacts);
+  }
+  z = correction_probabilities;
+  
+  K = prediction_variance * H.transpose() * (H*prediction_variance*H.transpose() + sigma_vk).completeOrthogonalDecomposition().pseudoInverse();
+  Eigen::MatrixXd contact_probability_overall = prediction_probability + K*(z - H*prediction_probability);
+  Eigen::MatrixXd contact_variance_overall = (Eigen::MatrixXd::Identity(nReadings*numThreeDofContacts, nReadings*numThreeDofContacts) - K*H) * prediction_variance;
+
+  // std::cout << "z: " << z << std::endl;
+  // std::cout << "H: " << H << std::endl;
+  // std::cout << "K: " << K << std::endl;
+  // std::cout << "sigma_vk: " << sigma_vk << std::endl;
+  return contact_probability_overall;
 }
 }  // namespace legged

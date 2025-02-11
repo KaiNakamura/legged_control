@@ -57,10 +57,18 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   ros::Publisher leg3_contact_force_pub;
   ros::Publisher leg4_contact_force_pub;
 
+  ros::Publisher leg1_force_sensor_pub;
+
+  ros::Publisher height_pub;
+
   std_msgs::Int16 leg1_contact_force;
   std_msgs::Int16 leg2_contact_force;
   std_msgs::Int16 leg3_contact_force;
   std_msgs::Int16 leg4_contact_force;
+
+  std_msgs::Int16 leg1_force_sensor;
+  
+  std_msgs::Float64 height;
 
   // State Estimation
   SystemObservation currentObservation_;
@@ -84,6 +92,9 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   ros::Publisher observationPublisher_;
 
   size_t updatedMode;
+
+  double contactTime;
+  bool earlyContactLoss = false;
 
  private:
   std::thread mpcThread_;
