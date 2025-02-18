@@ -244,6 +244,12 @@ RUN cd $CATKIN_WS/src && \
 RUN cd $CATKIN_WS/src && \
     git clone https://github.com/KaiNakamura/towr.git
 
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/Akalay27/legged_perceptive.git
+    
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/fratopa/Mid360_simulation_plugin.git
+
 RUN /bin/bash -c "cd $CATKIN_WS && \
     source /opt/ros/$ROS_DISTRO/setup.sh && \
     catkin init && \

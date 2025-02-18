@@ -64,7 +64,7 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg3_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg3_force", 10);
   leg4_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_force", 10);
 
-  joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 10, &ContactEstimate::getForceReadings, this);
+  joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 1, &ContactEstimate::getForceReadings, this);
 }
 
 size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
