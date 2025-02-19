@@ -58,6 +58,7 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg1_contact_prob_height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_height_prob", 10);
   leg1_contact_prob_force_sensors_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_force_sensors_prob", 10);
   leg1_height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_height", 10);
+  leg1_foothold_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_foothold", 10);
 
   leg1_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_force", 10);
   leg2_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg2_force", 10);
@@ -65,6 +66,7 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg4_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_force", 10);
 
   joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 1, &ContactEstimate::getForceReadings, this);
+  foothold_sub = nh.subscribe("/legged_robot/optimizedStateTrajectory", 1, &ContactEstimate::getFootholds, this);
 }
 
 size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
@@ -278,6 +280,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg4_force.data = force_sensor_readings[3];
 
   leg1_height.data = footPos[0][2];
+  leg1_foothold.data = mean_zg[0] - foot_offset;
 
   // Publish ros msgs
   leg1_contact_pub.publish(leg1_contact);
@@ -295,13 +298,13 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg1_contact_prob_force_pub.publish(leg1_contact_prob_force);
   leg1_contact_prob_force_sensors_pub.publish(leg1_contact_prob_force_sensors);
 
-
   leg1_force_pub.publish(leg1_force);
   leg2_force_pub.publish(leg2_force);
   leg3_force_pub.publish(leg3_force);
   leg4_force_pub.publish(leg4_force);
 
   leg1_height_pub.publish(leg1_height);
+  leg1_foothold_pub.publish(leg1_foothold);
 
   return mode_detected;
 }
@@ -329,6 +332,17 @@ void ContactEstimate::getForceReadings(const sensor_msgs::JointState msg){
     force_sensor_readings[i] = msg.effort[12 + i];
   }
   force_sensor_read = true;
+}
+
+void ContactEstimate::getFootholds(const visualization_msgs::MarkerArray msg){
+  // Note again replace 4 with numlegs and 12 with numdof
+  for(visualization_msgs::Marker marker: msg.markers){
+    if(marker.ns == "Future Footholds" && marker.points.size() > 0){
+      for(int i = 0; i < info_.numThreeDofContacts; i++){
+        mean_zg[i] = marker.points[0] + foot_offset;
+      }
+    }
+  }
 }
 
 Eigen::MatrixXd ContactEstimate::KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts){

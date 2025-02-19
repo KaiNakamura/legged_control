@@ -8,6 +8,9 @@ WORKDIR /home
 ENV CATKIN_WS catkin_ws
 ENV ROS_PACKAGE_PATH $CATKIN_WS/src
 
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES all
+
 # Create the catkin workspace
 RUN mkdir -p $CATKIN_WS/src
 
@@ -190,6 +193,7 @@ RUN apt-get install -y --no-install-recommends \
     coinor-libipopt-dev \
     libncurses5-dev \
     ros-noetic-xpp \
+    ros-noetic-rqt-controller-manager \
     ros-noetic-pybind11-catkin \
     rsync \
     libmpfr-dev \
@@ -224,6 +228,30 @@ RUN cd $CATKIN_WS/src && \
 # Clone elevation_mapping_cupy
 RUN cd $CATKIN_WS/src && \
     git clone https://github.com/leggedrobotics/elevation_mapping_cupy.git
+
+# Clone elevation mapping
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ANYbotics/kindr_ros.git    
+
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ANYbotics/kindr.git
+
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ANYbotics/message_logger.git
+
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/ANYbotics/elevation_mapping.git
+
+# Clone realsense gazebo plugins
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/pal-robotics/realsense_gazebo_plugin.git
+
+
+# Clone realsense2 description
+RUN cd $CATKIN_WS/src && \
+    git clone https://github.com/IntelRealSense/realsense-ros.git 
+RUN cd $CATKIN_WS/src/realsense-ros && \
+    git checkout ros1-legacy
 
 # Install dependencies
 RUN cd $CATKIN_WS && \

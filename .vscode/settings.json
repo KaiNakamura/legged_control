@@ -8,5 +8,16 @@
         "/opt/ros/noetic/lib/python3/dist-packages",
         "$PYTHONPATH",
         "$CATKIN_WS/src/raisimlib/raisim/linux/lib"
-    ]
+    ],
+    "files.associations": {
+        "array": "cpp",
+        "deque": "cpp",
+        "initializer_list": "cpp",
+        "list": "cpp",
+        "utility": "cpp",
+        "vector": "cpp",
+        "xhash": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp"
+    }
 }

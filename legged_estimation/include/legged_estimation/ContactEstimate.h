@@ -20,6 +20,9 @@
 #include "std_msgs/Int16.h"
 #include "std_msgs/Float64.h"
 #include <sensor_msgs/JointState.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/Marker.h>
+#include <geometry_msgs/Point.h>
 
 namespace legged {
 using namespace ocs2;
@@ -40,6 +43,7 @@ class ContactEstimate{
   double calculateContactProbabilityFootForce(double foot_force);
   double calculateContactProbabilityForceSensor(double foot_force);
   void getForceReadings(const sensor_msgs::JointState msg);
+  void getFootholds(const visualization_msgs::MarkerArray msg);
   Eigen::MatrixXd KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
 
   PinocchioInterface pinocchioInterface_;
@@ -67,12 +71,13 @@ class ContactEstimate{
 
   double variance_not_c0 = 0.05;
   double variance_not_c1 = 0.05;
-  double variance_c0 = 0.05;
-  double variance_c1 = 0.05;
+  double variance_c0 = 0.1;
+  double variance_c1 = 0.1;
 
   // Note: these can be updated based on other sensors (vision) and historical footsteps
   // Note: Replace 4 with num legs from somewhere
-  double mean_zg[4] = {0.02, 0.02, 0.02, 0.02};
+  double foot_offset = 0.02;
+  double mean_zg[4] = {foot_offset, foot_offset, foot_offset, foot_offset};
   double variance_zg = 0.075;
 
   double force_sensor_readings[4] = {-1, -1, -1, -1};
@@ -109,6 +114,7 @@ class ContactEstimate{
   ros::Publisher leg1_contact_prob_force_sensors_pub;
 
   ros::Publisher leg1_height_pub;
+  ros::Publisher leg1_foothold_pub;
 
   std_msgs::Int16 leg1_contact;
   std_msgs::Int16 leg2_contact;
@@ -126,6 +132,7 @@ class ContactEstimate{
   std_msgs::Float64 leg1_contact_prob_force_sensors;
 
   std_msgs::Float64 leg1_height;
+  std_msgs::Float64 leg1_foothold;
 
   std_msgs::Float64 leg1_force;
   std_msgs::Float64 leg2_force;
@@ -133,6 +140,7 @@ class ContactEstimate{
   std_msgs::Float64 leg4_force;
 
   ros::Subscriber joint_state_sub;
+  ros::Subscriber foothold_sub;
 
  private:
   // Topic
