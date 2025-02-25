@@ -11,6 +11,9 @@ find_package(catkin REQUIRED
         legged_common
         realtime_tools
         tf2_ros
+        convex_plane_decomposition_msgs
+        convex_plane_decomposition_ros
+        grid_map_sdf
         )
 
 find_package(PkgConfig REQUIRED)
@@ -27,6 +30,9 @@ catkin_package(
         legged_common
         realtime_tools
         tf2_ros
+        convex_plane_decomposition_msgs
+        convex_plane_decomposition_ros
+        grid_map_sdf
 )
 
 ###########

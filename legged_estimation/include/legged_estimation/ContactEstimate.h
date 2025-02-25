@@ -24,6 +24,10 @@
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Point.h>
 
+#include <convex_plane_decomposition/PlanarRegion.h>
+#include <convex_plane_decomposition_msgs/PlanarTerrain.h>
+#include <convex_plane_decomposition_ros/MessageConversion.h>
+
 namespace legged {
 using namespace ocs2;
 using namespace legged_robot;
@@ -43,7 +47,7 @@ class ContactEstimate{
   double calculateContactProbabilityFootForce(double foot_force);
   double calculateContactProbabilityForceSensor(double foot_force);
   void getForceReadings(const sensor_msgs::JointState msg);
-  void getFootholds(const visualization_msgs::MarkerArray msg);
+  void getMap(const convex_plane_decomposition_msgs::PlanarTerrain::ConstPtr& msg);
   Eigen::MatrixXd KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
 
   PinocchioInterface pinocchioInterface_;
@@ -82,6 +86,8 @@ class ContactEstimate{
 
   double force_sensor_readings[4] = {-1, -1, -1, -1};
   bool force_sensor_read = false;
+  
+  bool map_recieved = false;
 
   double mean_force = 30;
   double variance_force = 15;
@@ -140,7 +146,10 @@ class ContactEstimate{
   std_msgs::Float64 leg4_force;
 
   ros::Subscriber joint_state_sub;
-  ros::Subscriber foothold_sub;
+  ros::Subscriber map_sub;
+
+  convex_plane_decomposition::PlanarTerrain planarTerrain_;
+  bool hasMap = false;
 
  private:
   // Topic

@@ -58,7 +58,7 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg1_contact_prob_height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_height_prob", 10);
   leg1_contact_prob_force_sensors_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_force_sensors_prob", 10);
   leg1_height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_height", 10);
-  leg1_foothold_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_foothold", 10);
+  leg1_foothold_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_terrain", 10);
 
   leg1_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_force", 10);
   leg2_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg2_force", 10);
@@ -66,7 +66,7 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg4_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_force", 10);
 
   joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 1, &ContactEstimate::getForceReadings, this);
-  foothold_sub = nh.subscribe("/legged_robot/optimizedStateTrajectory", 1, &ContactEstimate::getFootholds, this);
+  map_sub = nh.subscribe("/convex_plane_decomposition_ros/planar_terrain", 1, &ContactEstimate::getMap, this);
 }
 
 size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
@@ -196,11 +196,17 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   // Begin Kalman correction measurement model (update phase)
   std::vector<vector3_t> footPos = eeKinematics_->getPosition(vector_t()); // I hate this notation but it's native to pinocchio interface
 
-  // std::cout << "foot position: " << std::endl;
   // for(int i = 0; i < info_.numThreeDofContacts; i++){
-  //   std::cout << footPos[i].transpose() << " ";
+    // std::cout << "Foot " << i << ": " << footPos[i].transpose() << " ";
   // }
   // std::cout << std::endl;
+
+  if(hasMap){
+    for(int i = 0; i < info_.numThreeDofContacts; i++){
+      double planeHeight = planarTerrain_.gridMap.atPosition("elevation_before_postprocess", footPos[i].head<2>());
+      mean_zg[i] = planeHeight + foot_offset;
+    }
+  }
 
   Eigen::MatrixXd contact_probability_height = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
@@ -238,7 +244,6 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   // std::cout << "contact probability force: " << std::endl << contact_probability_force.transpose() << std::endl;
 
   // std::cout << "Overall contact probability: " << std::endl << contact_probability_overall.transpose() << std::endl;
-  // std::cout << "mean foot height 1: " << mean_zg[0] << std::endl;
   // std::cout << "Overall contact variance: " << std::endl << contact_variance_overall.transpose() << std::endl;
 
   for(int i = 0; i < info_.numThreeDofContacts; i++){
@@ -328,21 +333,15 @@ double ContactEstimate::calculateContactProbabilityForceSensor(double foot_force
 
 void ContactEstimate::getForceReadings(const sensor_msgs::JointState msg){
   // Note again replace 4 with numlegs and 12 with numdof
-  for(int i = 0; i < 4; i++){
+  for(int i = 0; i < info_.numThreeDofContacts; i++){
     force_sensor_readings[i] = msg.effort[12 + i];
   }
   force_sensor_read = true;
 }
 
-void ContactEstimate::getFootholds(const visualization_msgs::MarkerArray msg){
-  // Note again replace 4 with numlegs and 12 with numdof
-  for(visualization_msgs::Marker marker: msg.markers){
-    if(marker.ns == "Future Footholds" && marker.points.size() > 0){
-      for(int i = 0; i < info_.numThreeDofContacts; i++){
-        mean_zg[i] = marker.points[0] + foot_offset;
-      }
-    }
-  }
+void ContactEstimate::getMap(const convex_plane_decomposition_msgs::PlanarTerrain::ConstPtr& msg){
+  hasMap = true;
+  planarTerrain_ = convex_plane_decomposition::PlanarTerrain(convex_plane_decomposition::fromMessage(*msg));
 }
 
 Eigen::MatrixXd ContactEstimate::KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts){

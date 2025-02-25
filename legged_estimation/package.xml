@@ -16,4 +16,7 @@
     <depend>realtime_tools</depend>
     <depend>tf2_ros</depend>
 
+    <depend>convex_plane_decomposition_msgs</depend>
+    <depend>convex_plane_decomposition_ros</depend>
+    <depend>grid_map_sdf</depend>
 </package>
