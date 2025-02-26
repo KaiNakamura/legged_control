@@ -24,6 +24,10 @@
 #include <legged_wbc/WeightedWbc.h>
 #include <pluginlib/class_list_macros.hpp>
 
+#include "pinocchio/algorithm/joint-configuration.hpp"
+#include "pinocchio/algorithm/jacobian.hpp"
+#include "pinocchio/algorithm/kinematics.hpp"
+
 namespace legged {
 bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& controller_nh) {
   // Initialize OCS2
@@ -33,6 +37,15 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
   controller_nh.getParam("/urdfFile", urdfFile);
   controller_nh.getParam("/taskFile", taskFile);
   controller_nh.getParam("/referenceFile", referenceFile);
+
+  controller_nh.getParam("/eePos", eePosFile);
+  controller_nh.getParam("/eeRegions", eeRegionsFile);
+  controller_nh.getParam("/eeTypes", eeTypesFile);
+  controller_nh.getParam("/forces", forcesFile);
+  controller_nh.getParam("/states", statesFile);
+  controller_nh.getParam("/swings", swingsFile);
+  controller_nh.getParam("/time", timeFile);
+
   bool verbose = false;
   loadData::loadCppDataType(taskFile, "legged_robot_interface.verbose", verbose);
 
@@ -103,70 +116,155 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   // State Estimate
   updateStateEstimation(time, period);
 
-  if(measuredRbdState_(5) > 0.15){
-    currentObservation_.mode = updatedMode;
-  }
+  if(!mipActivated){
+    if(measuredRbdState_(5) > 0.15){
+      currentObservation_.mode = updatedMode;
+    }
 
-  // Update the current state of the system
-  mpcMrtInterface_->setCurrentObservation(currentObservation_);
+    // Update the current state of the system
+    mpcMrtInterface_->setCurrentObservation(currentObservation_);
 
-  // Load the latest MPC policy
-  mpcMrtInterface_->updatePolicy();
+    // Load the latest MPC policy
+    mpcMrtInterface_->updatePolicy();
 
-  // Evaluate the current policy
-  vector_t optimizedState, optimizedInput;
-  size_t plannedMode = 0;  // The mode that is active at the time the policy is evaluated at.
-  mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, optimizedState, optimizedInput, plannedMode);
+    // Evaluate the current policy
+    vector_t optimizedState, optimizedInput;
+    size_t plannedMode = 0;  // The mode that is active at the time the policy is evaluated at.
+    mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, optimizedState, optimizedInput, plannedMode);
 
-  // Whole body control
-  currentObservation_.input = optimizedInput;
+    // Whole body control
+    currentObservation_.input = optimizedInput;
 
-  wbcTimer_.startTimer();
-  vector_t x;
-  if(measuredRbdState_(5) > 0.15){
-    x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, updatedMode, period.toSec());
+    wbcTimer_.startTimer();
+    vector_t x;
+    if(measuredRbdState_(5) > 0.15){
+      x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, updatedMode, period.toSec());
+    }
+    else{
+      x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, plannedMode, period.toSec());
+    }
+    wbcTimer_.endTimer();
+
+    vector_t torque = x.tail(12);
+    updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, contactFlag, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
+    
+    // std::cout << measuredRbdState_(5) << std::endl;
+
+    leg1_contact_force.data = contactFlag[0];
+    leg2_contact_force.data = contactFlag[1];
+    leg3_contact_force.data = contactFlag[2];
+    leg4_contact_force.data = contactFlag[3];
+
+    leg1_contact_force_pub.publish(leg1_contact_force);
+    leg2_contact_force_pub.publish(leg2_contact_force);
+    leg3_contact_force_pub.publish(leg3_contact_force);
+    leg4_contact_force_pub.publish(leg4_contact_force);
+
+    height.data = measuredRbdState_(5);
+    height_pub.publish(height);
+
+    // std::cout << "planned mode: " << plannedMode << std::endl;
+    // std::cout << "force sensors mode: " << currentObservation_.mode << std::endl;
+    // std::cout << "updated mode: " << updatedMode << std::endl;
+    // std::cout << "actual mode: " << mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_.modeAtTime(currentObservation_.time) << std::endl;
+
+    vector_t posDes = centroidal_model::getJointAngles(optimizedState, leggedInterface_->getCentroidalModelInfo());
+    vector_t velDes = centroidal_model::getJointVelocities(optimizedInput, leggedInterface_->getCentroidalModelInfo());
+
+    // Safety check, if failed, stop the controller
+    if (!safetyChecker_->check(currentObservation_, optimizedState, optimizedInput)) {
+      ROS_ERROR_STREAM("[Legged Controller] Safety check failed, stopping the controller.");
+      stopRequest(time);
+    }
+
+    for (size_t j = 0; j < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; ++j) {
+      hybridJointHandles_[j].setCommand(posDes(j), velDes(j), 0, 3, torque(j));
+    }
+
+    // std::cout << "Optimized state: " << std::endl << optimizedState << std::endl;
+    // std::cout << "Optimized input: " << std::endl << optimizedInput << std::endl;
+    // std::cout << "rbdState: " << std::endl << measuredRbdState_ << std::endl;
   }
   else{
-    x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, plannedMode, period.toSec());
+    vector_t x;
+    std::cout << "Time: " << (time.nsec - mipStartTime.nsec)/1.0e9 << std::endl;
+    
+    int idx = 0;
+    for(int i = 1; i < times.size(); i++){
+      // std::cout << times[i] << " ";
+      if((time.nsec - mipStartTime.nsec)/1.0e9 < times[i]){
+        idx = i - 1;
+        break;
+      }
+    }
+    // std::cout << std::endl;
+
+    if((time.nsec - mipStartTime.nsec)/1.0e9 > 0.03){
+      std::cout << "Idx: " << idx << std::endl;
+
+      // std::cout << "States: " << std::endl;
+      // for(int i = 0; i < states.size(); i++){
+      //   for(int j = 0; j < states[0].size(); j++){
+      //     std::cout << i << ", " << j << " " << states[i][j] << std::endl;
+      //   }
+      //   std::cout << std::endl;
+      // }
+
+      // std::cout << "Forces: " << forces.size();
+      // std::cout << " Forces[0]: " << forces[0].size() << std::endl;
+      // Rearrange csv order into acceptable form
+      Eigen::VectorXd optimizedState = Eigen::VectorXd::Zero(24);
+      Eigen::VectorXd optimizedInput = Eigen::VectorXd::Zero(18);
+
+      Eigen::VectorXd hqb = Eigen::VectorXd::Zero(12);
+      hqb << states[6][idx], states[7][idx], states[8][idx], states[15][idx], states[16][idx], states[17][idx], states[0][idx], states[1][idx], states[2][idx], states[9][idx], states[10][idx], states[11][idx];
+      optimizedState.segment<12>(0) = hqb;
+      // optimizedState(0) = states[7][idx]; optimizedState(1) = states[8][idx]; optimizedState(2) = states[9][idx];
+      // optimizedState(3) = states[15][idx]; optimizedState(4) = states[16][idx]; optimizedState(5) = states[17][idx];
+      // optimizedState(6) = states[0][idx]; optimizedState(7) = states[1][idx]; optimizedState(8) = states[2][idx];
+      // optimizedState(9) = states[10][idx]; optimizedState(10) = states[11][idx]; optimizedState(11) = states[12][idx];
+
+      CentroidalModelInfo info_ = leggedInterface_->getCentroidalModelInfo();
+      eeKinematicsPtr_->setPinocchioInterface(leggedInterface_->getPinocchioInterface());
+
+      std::vector<vector3_t> footPos = eeKinematicsPtr_->getPosition(vector_t());
+
+      Eigen::VectorXd qMeasured_ = Eigen::VectorXd(info_.generalizedCoordinatesNum);
+      qMeasured_.head<3>() = measuredRbdState_.segment<3>(3);
+      qMeasured_.segment<3>(3) = measuredRbdState_.head<3>();
+      qMeasured_.tail(info_.actuatedDofNum) = measuredRbdState_.segment(6, info_.actuatedDofNum);
+
+      // std::cout << "Optimized State pre-ik: " << optimizedState << std::endl;
+      for(int i = 0; i < info_.numThreeDofContacts; i++){
+        Eigen::VectorXd footstep = Eigen::VectorXd(3);
+        footstep << eePos[0 + 3*i][idx], eePos[1 + 3*i][idx], eePos[2 + 3*i][idx];
+
+        // Eigen::VectorXd q = ik(qMeasured_.segment<3>(6 + 3*i), info_.endEffectorFrameIndices[i], footstep);
+        // std::cout << "q" << i << ": " << q << std::endl <<  "segmented:" << std::endl << q.segment<3>(0) << std::endl << "qMeasured: " << qMeasured_.segment<3>(6 + 3*i) << std::endl;
+
+        optimizedState.segment(12 + 3*i, 3) = qMeasured_.segment(6 + 3*i, 3);
+      }
+
+      std::cout << "Optimized State: " << optimizedState << std::endl;
+
+      for(int i = 0; i < 3*info_.numThreeDofContacts; i++){
+        optimizedInput(i) = forces[i][idx];
+      }
+      // std::cout << "Optimized Input: " << optimizedInput << std::endl;
+
+      size_t currMode = 0;
+      for(int i = 0; i < info_.numThreeDofContacts; i++){
+        if(swings[i][idx / (times.size()/swings[0].size())]){
+          currMode += (int) pow(2, i);
+          // mean_zg[i] = footPos[i](2) + 0.05;
+        }
+      }
+      x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, currMode, period.toSec());
+      
+      // updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, contactFlag, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
+
+    }
   }
-  wbcTimer_.endTimer();
-
-  vector_t torque = x.tail(12);
-  updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, contactFlag, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
-  
-  // std::cout << measuredRbdState_(5) << std::endl;
-
-  leg1_contact_force.data = contactFlag[0];
-  leg2_contact_force.data = contactFlag[1];
-  leg3_contact_force.data = contactFlag[2];
-  leg4_contact_force.data = contactFlag[3];
-
-  leg1_contact_force_pub.publish(leg1_contact_force);
-  leg2_contact_force_pub.publish(leg2_contact_force);
-  leg3_contact_force_pub.publish(leg3_contact_force);
-  leg4_contact_force_pub.publish(leg4_contact_force);
-
-  height.data = measuredRbdState_(5);
-  height_pub.publish(height);
-
-  // std::cout << "planned mode: " << plannedMode << std::endl;
-  // std::cout << "force sensors mode: " << currentObservation_.mode << std::endl;
-  // std::cout << "updated mode: " << updatedMode << std::endl;
-  // std::cout << "actual mode: " << mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_.modeAtTime(currentObservation_.time) << std::endl;
-
-  vector_t posDes = centroidal_model::getJointAngles(optimizedState, leggedInterface_->getCentroidalModelInfo());
-  vector_t velDes = centroidal_model::getJointVelocities(optimizedInput, leggedInterface_->getCentroidalModelInfo());
-
-  // Safety check, if failed, stop the controller
-  if (!safetyChecker_->check(currentObservation_, optimizedState, optimizedInput)) {
-    ROS_ERROR_STREAM("[Legged Controller] Safety check failed, stopping the controller.");
-    stopRequest(time);
-  }
-
-  for (size_t j = 0; j < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; ++j) {
-    hybridJointHandles_[j].setCommand(posDes(j), velDes(j), 0, 3, torque(j));
-  }
-
   // Visualization
   robotVisualizer_->update(currentObservation_, mpcMrtInterface_->getPolicy(), mpcMrtInterface_->getCommand());
   selfCollisionVisualization_->update(currentObservation_);
@@ -258,6 +356,7 @@ void LeggedController::setupMpc() {
   leg4_contact_force_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg4_contact_force", 10);
 
   height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/height", 10);
+  mipActivationSub = nh.subscribe("activate_MIP_file", 1, &LeggedController::mipActivationCallback, this);
 }
 
 void LeggedController::setupMrt() {
@@ -304,6 +403,162 @@ void LeggedCheaterController::setupStateEstimate(const std::string& /*taskFile*/
 
   contactEstimate_ = std::make_shared<ContactEstimate>(leggedInterface_->getPinocchioInterface(),
                                                         leggedInterface_->getCentroidalModelInfo(), *eeKinematicsPtr_);
+}
+
+void LeggedController::mipActivationCallback(std_msgs::Time msg){
+  mipActivated = true;
+  mipStartTime = msg.data;
+
+  readCSVDouble(eePosFile, eePos);
+  readCSVDouble(forcesFile, forces);
+  readCSVDouble(statesFile, states);
+  readCSVDouble(timeFile, times);
+
+  readCSVInt(eeRegionsFile, eeRegions);
+  readCSVInt(eeTypesFile, eeTypes);
+  readCSVInt(swingsFile, swings);
+}
+
+void LeggedController::readCSVDouble(std::string file, std::vector<std::vector<double>> &vec){
+  std::ifstream fin;
+  fin.open(file, std::ios::in);
+
+  std::vector<double> row;
+  std::string line, word, temp;
+
+  if(!fin){
+    std::cout << "OPEN FAILED" << std::endl;
+  }
+  // std::cout << "Reading csv at " << file << std::endl;
+  while (getline(fin, line)){
+    row.clear();
+    std::stringstream s(line);
+    // read every column data of a row and
+    // store it in a string variable, 'word'
+    while (getline(s, word, ','))
+    {
+        // add all the column data
+        // of a row to a vector
+        row.push_back(std::stod(word));
+    }
+
+    vec.push_back(row);
+  }
+  fin.close();
+}
+
+void LeggedController::readCSVInt(std::string file, std::vector<std::vector<int>> &vec){
+  std::ifstream fin;
+  fin.open(file, std::ios::in);
+
+  std::vector<int> row;
+  std::string line, word, temp;
+
+  if(!fin){
+    std::cout << "OPEN FAILED" << std::endl;
+  }
+  std::cout << "Reading csv at " << file << std::endl;
+  while (getline(fin, line)){
+    row.clear();
+    std::stringstream s(line);
+    // read every column data of a row and
+    // store it in a string variable, 'word'
+    while (getline(s, word, ','))
+    {
+        // add all the column data
+        // of a row to a vector
+        row.push_back((int) std::stod(word));
+    }
+
+    vec.push_back(row);
+  }
+  fin.close();
+}
+
+void LeggedController::readCSVDouble(std::string file, std::vector<double> &vec){
+  std::ifstream fin;
+  fin.open(file, std::ios::in);
+
+  std::vector<double> row;
+  std::string line, word, temp;
+
+  if(!fin){
+    std::cout << "OPEN FAILED" << std::endl;
+  }
+  std::cout << "Reading csv at " << file << std::endl;
+  while (getline(fin, line)){
+    std::stringstream s(line);
+    // read every column data of a row and
+    // store it in a string variable, 'word'
+    while (getline(s, word, ','))
+    {
+        // add all the column data
+        // of a row to a vector
+        row.push_back(std::stod(word));
+    }
+  }
+
+  vec = row;
+
+  fin.close();
+}
+
+Eigen::VectorXd LeggedController::ik(vector_t q0, int jointID, vector_t xd){
+  CentroidalModelInfo info_ = leggedInterface_->getCentroidalModelInfo();
+
+  const auto& model = leggedInterface_->getPinocchioInterface().getModel();
+  auto& data = leggedInterface_->getPinocchioInterface().getData();
+
+  const pinocchio::SE3 oMdes(Eigen::Matrix3d::Identity(), Eigen::Vector3d(xd(1), xd(2), xd(3)));
+
+  Eigen::VectorXd q = q0;
+  const double eps  = 1e-4;
+  const int IT_MAX  = 1000;
+  const double DT   = 1e-1;
+  const double damp = 1e-6;
+
+  pinocchio::Data::Matrix6x J(6, info_.numThreeDofContacts);
+  J.setZero();
+
+  bool success = false;
+  typedef Eigen::Matrix<double, 6, 1> Vector6d;
+  Vector6d err;
+  Eigen::VectorXd v(info_.numThreeDofContacts);
+  for (int i=0;;i++)
+  {
+    pinocchio::forwardKinematics(model,data,q);
+    const pinocchio::SE3 dMi = oMdes.actInv(data.oMi[jointID]);
+    err = pinocchio::log6(dMi).toVector();
+    if(err.norm() < eps)
+    {
+      success = true;
+      break;
+    }
+    if (i >= IT_MAX)
+    {
+      success = false;
+      break;
+    }
+    pinocchio::computeJointJacobian(model,data,q, jointID,J);
+    pinocchio::Data::Matrix6 JJt;
+    JJt.noalias() = J * J.transpose();
+    JJt.diagonal().array() += damp;
+    v.noalias() = - J.transpose() * JJt.ldlt().solve(err);
+    q = pinocchio::integrate(model,q,v*DT);
+    if(!(i%10))
+      std::cout << i << ": error = " << err.transpose() << std::endl;
+  }
+
+  if(success) 
+  {
+    std::cout << "Convergence achieved!" << std::endl;
+  }
+  else 
+  {
+    std::cout << "\nWarning: the iterative algorithm has not reached convergence to the desired precision" << std::endl;
+  }
+
+  return q;
 }
 
 }  // namespace legged

@@ -11,6 +11,15 @@
     <param name="referenceFile" value="$(find legged_controllers)/config/$(arg robot_type)/reference.info"/>
     <param name="gaitCommandFile" value="$(find legged_controllers)/config/$(arg robot_type)/gait.info"/>
 
+    <param name="eePos" value="$(find legged_controllers)/config/csv_files/eePos.csv"/>
+    <param name="eeRegions" value="$(find legged_controllers)/config/csv_files/eeRegions.csv"/>
+    <param name="eeTypes" value="$(find legged_controllers)/config/csv_files/eeTypes.csv"/>
+    <param name="forces" value="$(find legged_controllers)/config/csv_files/forces.csv"/>
+    <param name="states" value="$(find legged_controllers)/config/csv_files/states.csv"/>
+    <param name="swings" value="$(find legged_controllers)/config/csv_files/swings.csv"/>
+    <param name="time" value="$(find legged_controllers)/config/csv_files/time.csv"/>
+
+
     <rosparam file="$(find legged_controllers)/config/controllers.yaml" command="load"/>
 
     <node if="$(arg cheater)" name="controller_loader" pkg="controller_manager" type="controller_manager"

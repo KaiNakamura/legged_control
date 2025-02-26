@@ -21,6 +21,7 @@
 #include "legged_controllers/visualization/LeggedSelfCollisionVisualization.h"
 
 #include <legged_estimation/ContactEstimate.h>
+#include "std_msgs/Time.h"
 
 namespace legged {
 using namespace ocs2;
@@ -44,6 +45,11 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   virtual void setupMpc();
   virtual void setupMrt();
   virtual void setupStateEstimate(const std::string& taskFile, bool verbose);
+  void mipActivationCallback(std_msgs::Time msg);
+  void readCSVDouble(std::string file, std::vector<std::vector<double>> &vec);
+  void readCSVInt(std::string file, std::vector<std::vector<int>> &vec);
+  void readCSVDouble(std::string file, std::vector<double> &vec);
+  Eigen::VectorXd ik(vector_t q0, int jointID, vector_t xd);
 
   // Interface
   std::shared_ptr<LeggedInterface> leggedInterface_;
@@ -94,7 +100,26 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   size_t updatedMode;
 
   double contactTime;
-  bool earlyContactLoss = false;
+
+  bool mipActivated = false;
+  ros::Time mipStartTime;
+  ros::Subscriber mipActivationSub;
+
+  std::string eePosFile;
+  std::string eeRegionsFile;
+  std::string eeTypesFile;
+  std::string forcesFile;
+  std::string statesFile;
+  std::string swingsFile;
+  std::string timeFile;
+
+  std::vector<std::vector<double>> eePos;
+  std::vector<std::vector<int>> eeRegions;
+  std::vector<std::vector<int>> eeTypes;
+  std::vector<std::vector<double>> forces;
+  std::vector<std::vector<double>> states;
+  std::vector<std::vector<int>> swings;
+  std::vector<double> times;
 
  private:
   std::thread mpcThread_;
