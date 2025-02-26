@@ -27,6 +27,7 @@
 #include <convex_plane_decomposition/PlanarRegion.h>
 #include <convex_plane_decomposition_msgs/PlanarTerrain.h>
 #include <convex_plane_decomposition_ros/MessageConversion.h>
+#include <grid_map_ros/grid_map_ros.hpp>
 
 namespace legged {
 using namespace ocs2;
@@ -47,7 +48,7 @@ class ContactEstimate{
   double calculateContactProbabilityFootForce(double foot_force);
   double calculateContactProbabilityForceSensor(double foot_force);
   void getForceReadings(const sensor_msgs::JointState msg);
-  void getMap(const convex_plane_decomposition_msgs::PlanarTerrain::ConstPtr& msg);
+  void getMap(const grid_map_msgs::GridMap& msg);
   Eigen::MatrixXd KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
 
   PinocchioInterface pinocchioInterface_;
@@ -82,7 +83,9 @@ class ContactEstimate{
   // Note: Replace 4 with num legs from somewhere
   double foot_offset = 0.02;
   double mean_zg[4] = {foot_offset, foot_offset, foot_offset, foot_offset};
-  double variance_zg = 0.075;
+
+  double joint_variance = 0.075;
+  double variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
   double force_sensor_readings[4] = {-1, -1, -1, -1};
   bool force_sensor_read = false;
@@ -120,6 +123,7 @@ class ContactEstimate{
   ros::Publisher leg1_contact_prob_force_sensors_pub;
 
   ros::Publisher leg1_height_pub;
+  ros::Publisher leg1_variance_pub;
   ros::Publisher leg1_foothold_pub;
 
   std_msgs::Int16 leg1_contact;
@@ -138,6 +142,7 @@ class ContactEstimate{
   std_msgs::Float64 leg1_contact_prob_force_sensors;
 
   std_msgs::Float64 leg1_height;
+  std_msgs::Float64 leg1_variance;
   std_msgs::Float64 leg1_foothold;
 
   std_msgs::Float64 leg1_force;
@@ -148,7 +153,7 @@ class ContactEstimate{
   ros::Subscriber joint_state_sub;
   ros::Subscriber map_sub;
 
-  convex_plane_decomposition::PlanarTerrain planarTerrain_;
+  grid_map::GridMap map;
   bool hasMap = false;
 
  private:
