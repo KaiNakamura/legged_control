@@ -49,7 +49,10 @@ class ContactEstimate{
   double calculateContactProbabilityForceSensor(double foot_force);
   void getForceReadings(const sensor_msgs::JointState msg);
   void getMap(const grid_map_msgs::GridMap& msg);
-  Eigen::MatrixXd KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
+  std::vector<Eigen::MatrixXd> KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
+  std::vector<Eigen::MatrixXd> sampleHeights(std::vector<vector3_t> position, int radius);
+  std::vector<Eigen::MatrixXd> weightVariances(std::vector<vector3_t> position, int radius);
+  double zTestWeighting(double z_score);
 
   PinocchioInterface pinocchioInterface_;
   CentroidalModelInfo info_;
@@ -95,7 +98,7 @@ class ContactEstimate{
   double mean_force = 30;
   double variance_force = 15;
 
-  double contact_likelihood_cutoff = 0.6;
+  double contact_likelihood_cutoff = 0.5;
   double contact_loss_likelihood_cutoff = 0.4;
   bool contact[4] = {false, false, false, false};
 

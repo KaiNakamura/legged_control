@@ -18,6 +18,8 @@
         "vector": "cpp",
         "xhash": "cpp",
         "xstring": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "core": "cpp",
+        "string_view": "cpp"
     }
 }

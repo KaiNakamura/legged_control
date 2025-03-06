@@ -47,6 +47,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     liboctomap-dev \
     python3-catkin-tools \
     ros-noetic-catkin \
+    ros-noetic-sensor-filters\
+    ros-noetic-robot-body-filter\
+    ros-noetic-point-cloud2-filters
     ros-noetic-interactive-markers \
     ros-noetic-grid-map-rviz-plugin \
     libglpk-dev \

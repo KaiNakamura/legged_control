@@ -203,21 +203,23 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   // std::cout << std::endl;
 
   if(hasMap){
-    // std::cout << "Layers:";
-    // for(int i = 0; i <map.getLayers().size(); i++){
-    //   std::cout << map.getLayers()[i] << " ";
-    // }
-    // std::cout << std::endl;
+    std::vector<Eigen::MatrixXd> weightedHeight = sampleHeights(footPos, 0);
+    std::vector<Eigen::MatrixXd> weightedVariance = weightVariances(footPos, 1);
 
     for(int i = 0; i < info_.numThreeDofContacts; i++){
-      double planeHeight = map.atPosition("elevation", footPos[i].head<2>());
-      mean_zg[i] = planeHeight + foot_offset;
-
-      // double planeVariance = map.atPosition("variance", footPos[i].head<2>());
-      double planeVariance = pow((planeHeight - map.atPosition("lower_bound", footPos[i].head<2>()))/2.0, 2);
-      variance_zg[i] = planeVariance + joint_variance;
+      mean_zg[i] = weightedHeight[0](i);
+      // variance_zg[i] = weightedHeight[1](i, i);
+      variance_zg[i] = weightedVariance[0](i);
+      // std::cout << "Mean foot " << i << ": " << mean_zg[i] << " Variance foot " << i << ": " << variance_zg[i] << std::endl;
     }
+    // std::cout << "Kalman foot height: " << weightedHeight[0] << std::endl;
+    // std::cout << "Kalman foot variance: " << weightedVariance[0] << std::endl;
+      // mean_zg = weightedHeight[0](0);
+      // variance_zg = weightedHeight[1](0);
+
+      // std::cout << "Height: " << mean_zg[i] << std::endl << "Variance: " << variance_zg[i] << std::endl;
   }
+
 
   Eigen::MatrixXd contact_probability_height = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
@@ -263,7 +265,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
 
     correction_variances << contact_variance_height, contact_variance_force, contact_variance_force_sensor;
 
-    contact_probability_overall = KalmanCorrection(3, correction_variances, correction_probabilities, contact_variance_time, contact_probability_time, info_.numThreeDofContacts);
+    contact_probability_overall = KalmanCorrection(3, correction_variances, correction_probabilities, contact_variance_time, contact_probability_time, info_.numThreeDofContacts)[0];
   }
   else{
     Eigen::MatrixXd correction_probabilities = Eigen::MatrixXd(2*info_.numThreeDofContacts, 1);
@@ -271,7 +273,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
     correction_probabilities << contact_probability_height, contact_probability_force;
     correction_variances << contact_variance_height, contact_variance_force;
 
-    contact_probability_overall = KalmanCorrection(2, correction_variances, correction_probabilities, contact_variance_time, contact_probability_time, info_.numThreeDofContacts);
+    contact_probability_overall = KalmanCorrection(2, correction_variances, correction_probabilities, contact_variance_time, contact_probability_time, info_.numThreeDofContacts)[0];
   }
   // std::cout << "contact probability force: " << std::endl << contact_probability_force.transpose() << std::endl;
 
@@ -378,7 +380,7 @@ void ContactEstimate::getMap(const grid_map_msgs::GridMap& msg){
   grid_map::GridMapRosConverter::fromMessage(msg, map);
 }
 
-Eigen::MatrixXd ContactEstimate::KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts){
+std::vector<Eigen::MatrixXd> ContactEstimate::KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts){
   Eigen::MatrixXd z = Eigen::MatrixXd(nReadings * numThreeDofContacts, 1);
   Eigen::MatrixXd K = Eigen::MatrixXd(nReadings * numThreeDofContacts, nReadings * numThreeDofContacts);
   Eigen::MatrixXd H = Eigen::MatrixXd(nReadings * numThreeDofContacts, numThreeDofContacts);
@@ -386,18 +388,166 @@ Eigen::MatrixXd ContactEstimate::KalmanCorrection(int nReadings, Eigen::MatrixXd
   for(int i = 0; i < nReadings; i++){
     H.block(i*numThreeDofContacts, 0, numThreeDofContacts, numThreeDofContacts) = Eigen::MatrixXd::Identity(numThreeDofContacts, numThreeDofContacts);
   }
-  Eigen::MatrixXd sigma_vk = correction_variances;
+  Eigen::MatrixXd sigma_vk = correction_variances.asDiagonal();
   z = correction_probabilities;
-  
+
   K = prediction_variance * H.transpose() * (H*prediction_variance*H.transpose() + sigma_vk).completeOrthogonalDecomposition().pseudoInverse();
   Eigen::MatrixXd contact_probability_overall = prediction_probability + K*(z - H*prediction_probability);
   Eigen::MatrixXd contact_variance_overall = (Eigen::MatrixXd::Identity(nReadings*numThreeDofContacts, nReadings*numThreeDofContacts) - K*H) * prediction_variance;
 
-  // std::cout << "z: " << z << std::endl;
-  // std::cout << "H: " << H << std::endl;
-  // std::cout << "K: " << K << std::endl;
-  // std::cout << "correction variances: " << correction_variances << std::endl;
-  // std::cout << "sigma_vk: " << sigma_vk << std::endl;
-  return contact_probability_overall;
+  // std::cout << "z: " << std::endl << z << std::endl;
+  // std::cout << "H: " << std::endl << H << std::endl;
+  // std::cout << "K: " << std::endl << K << std::endl;
+  // std::cout << "correction variances: " << std::endl << correction_variances << std::endl;
+  // std::cout << "correction measurements: " << std::endl << correction_probabilities << std::endl;
+  // std::cout << "prediction variances: " << std::endl << prediction_variance << std::endl;
+  // std::cout << "prediction measurement: " << std::endl << prediction_probability << std::endl;
+  // std::cout << "sigma_vk: " << std::endl << sigma_vk << std::endl;
+  std::vector<Eigen::MatrixXd> result(2);
+  result[0] = contact_probability_overall;
+  result[1] = contact_variance_overall;
+
+  return result;
+}
+
+std::vector<Eigen::MatrixXd> ContactEstimate::sampleHeights(std::vector<vector3_t> position, int radius){
+  int nCells = (2*radius + 1)*(2*radius + 1);
+  Eigen::MatrixXd correction_variances = Eigen::MatrixXd(nCells*info_.numThreeDofContacts, 1);
+  Eigen::MatrixXd correction_heights = Eigen::MatrixXd(nCells*info_.numThreeDofContacts, 1);
+  Eigen::MatrixXd prediction_variance = Eigen::MatrixXd(info_.numThreeDofContacts, info_.numThreeDofContacts); 
+  Eigen::MatrixXd prediction_height = Eigen::MatrixXd(info_.numThreeDofContacts,1);
+
+  for(int i = 0; i < info_.numThreeDofContacts; i++){
+    Eigen::Array2i radMat;
+    radMat << radius, radius;
+
+    Eigen::Array2i centerIdx;
+    map.getIndex(position[i].head<2>(), centerIdx);
+    Eigen::Array2i startIdx = centerIdx - radMat;
+
+    double planeHeight = map.at("elevation", centerIdx);
+    double planeVariance = pow((planeHeight - map.at("lower_bound", centerIdx))/2.33, 2);
+    if(std::isnan(planeHeight)){
+      planeHeight = 0;
+    }
+    if(std::isnan(planeVariance)){
+      planeVariance = 0.001;
+    }
+
+    planeHeight += foot_offset;
+    planeVariance += joint_variance;
+
+    for(int y = 0; y < 2*radius + 1; y++){
+      for(int x = 0; x < 2*radius + 1; x++){
+        Eigen::Array2i displacement;
+        displacement << x, y;
+
+        Eigen::Array2i idx = startIdx + displacement;
+
+        double height = map.at("elevation", idx);
+        double variance = pow((height - map.at("lower_bound", idx))/2.33, 2);
+        if(std::isnan(height)){
+          height = 0;
+        }
+        if(std::isnan(variance)){
+          variance = 0.001;
+        }
+  
+        height += foot_offset;
+        correction_heights(i*nCells + y*(2*radius + 1) + x) = height;
+  
+        variance += joint_variance;
+
+        double zDistance = map.getResolution()*sqrt(pow(centerIdx(0) - idx(0), 2) + pow(centerIdx(1) - idx(1), 2)) / sqrt(joint_variance);
+        double distanceWeight = zTestWeighting(zDistance);
+        correction_variances(i*nCells + y*(2*radius + 1) + x) = distanceWeight + variance;
+      }
+    }  
+
+    prediction_variance(i, i) = planeVariance;
+    prediction_height(i) = planeHeight;
+  }
+  // std::cout << "Height at foot: " << prediction_height << std::endl;
+
+  return KalmanCorrection(nCells, correction_variances, correction_heights, prediction_variance, prediction_height, info_.numThreeDofContacts);
+}
+
+std::vector<Eigen::MatrixXd> ContactEstimate::weightVariances(std::vector<vector3_t> position, int radius){
+  int nCells = (2*radius + 1)*(2*radius + 1);
+  Eigen::MatrixXd correction_weights = Eigen::MatrixXd(nCells*info_.numThreeDofContacts, 1);
+  Eigen::MatrixXd correction_variances = Eigen::MatrixXd(nCells*info_.numThreeDofContacts, 1);
+  Eigen::MatrixXd prediction_variance = Eigen::MatrixXd(info_.numThreeDofContacts, info_.numThreeDofContacts); 
+  Eigen::MatrixXd prediction_weight = Eigen::MatrixXd(info_.numThreeDofContacts,1);
+
+  for(int i = 0; i < info_.numThreeDofContacts; i++){
+    Eigen::Array2i radMat;
+    radMat << radius, radius;
+
+    Eigen::Array2i centerIdx;
+    map.getIndex(position[i].head<2>(), centerIdx);
+    Eigen::Array2i startIdx = centerIdx - radMat;
+
+    double planeHeight = map.at("elevation", centerIdx);
+    double planeVariance = pow((planeHeight - map.at("lower_bound", centerIdx))/2.33, 2);
+    if(std::isnan(planeHeight)){
+      planeHeight = 0;
+    }
+    if(std::isnan(planeVariance)){
+      planeVariance = 0.001;
+    }
+    planeHeight += foot_offset;
+    planeVariance += joint_variance;
+
+    for(int y = 0; y < 2*radius + 1; y++){
+      for(int x = 0; x < 2*radius + 1; x++){
+        Eigen::Array2i displacement;
+        displacement << x, y;
+
+        Eigen::Array2i idx = startIdx + displacement;
+        double height = map.at("elevation", idx);
+        double variance = pow((height - map.at("lower_bound", idx))/2.33, 2);
+
+        if(std::isnan(height)){
+          height = 0;
+        }
+        if(std::isnan(variance)){
+          variance = 0.001;
+        }
+        variance += joint_variance;
+        height += foot_offset;
+
+        double zDistance = map.getResolution()*sqrt(pow(centerIdx(0) - idx(0), 2) + pow(centerIdx(1) - idx(1), 2)) / sqrt(joint_variance);
+        double zHeight = (height - planeHeight) / sqrt(joint_variance);
+        double distanceWeight = zTestWeighting(zDistance);
+
+        correction_weights(i*nCells + y*(2*radius + 1) + x) = abs(1 + zHeight)*variance;
+        correction_variances(i*nCells + y*(2*radius + 1) + x) = distanceWeight + variance;
+      }
+    }  
+
+    prediction_variance(i, i) = planeVariance;
+    prediction_weight(i) = planeVariance;
+  }
+
+  return KalmanCorrection(nCells, correction_variances, correction_weights, prediction_variance, prediction_weight, info_.numThreeDofContacts);
+}
+
+double ContactEstimate::zTestWeighting(double z_score) {
+  // Approximation of the standard normal cumulative distribution function
+  double p = 0.3275911;
+  double a1 = 0.254829592;
+  double a2 = -0.284496736;
+  double a3 = 1.421413741;
+  double a4 = -1.453152027;
+  double a5 = 1.061405429;
+  double sign = 1;
+  if (z_score < 0) {
+      sign = -1;
+  }
+  double x = std::abs(z_score) / std::sqrt(2.0);
+  double t = 1.0 / (1.0 + p * x);
+  double erf_x = 1 - (a1 * t + a2 * t * t + a3 * t * t * t + a4 * t * t * t * t + a5 * t * t * t * t * t) * std::exp(-x * x);
+  double cdf_x = 0.5 * (1 + erf_x);
+  return 2*cdf_x; 
 }
 }  // namespace legged
