@@ -77,8 +77,8 @@ class ContactEstimate{
   double mean_c0 = 0;
   double mean_c1 = 1;
 
-  double variance_not_c0 = 0.05;
-  double variance_not_c1 = 0.05;
+  double variance_not_c0 = 0.1;
+  double variance_not_c1 = 0.1;
   double variance_c0 = 0.1;
   double variance_c1 = 0.1;
 
@@ -116,6 +116,7 @@ class ContactEstimate{
   ros::Publisher leg4_contact_prob_pub;
 
   ros::Publisher leg1_force_pub;
+
   ros::Publisher leg2_force_pub;
   ros::Publisher leg3_force_pub;
   ros::Publisher leg4_force_pub;
@@ -157,7 +158,6 @@ class ContactEstimate{
   ros::Subscriber map_sub;
 
   grid_map::GridMap map;
-  bool hasMap = false;
 
  private:
   // Topic

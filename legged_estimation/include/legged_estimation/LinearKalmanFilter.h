@@ -13,13 +13,15 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
+#include <grid_map_ros/grid_map_ros.hpp>
 
 namespace legged {
 using namespace ocs2;
-
+// Based on https://roboticsproceedings.org/rss08/p03.pdf
 class KalmanFilterEstimate : public StateEstimateBase {
  public:
   KalmanFilterEstimate(PinocchioInterface pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics);
+  void getMap(const grid_map_msgs::GridMap& msg);
 
   vector_t update(const ros::Time& time, const ros::Duration& period) override;
 
@@ -44,15 +46,13 @@ class KalmanFilterEstimate : public StateEstimateBase {
   scalar_t footHeightSensorNoise_ = 0.01;
 
  private:
-  Eigen::Matrix<scalar_t, 18, 1> xHat_;
-  Eigen::Matrix<scalar_t, 12, 1> ps_;
-  Eigen::Matrix<scalar_t, 12, 1> vs_;
-  Eigen::Matrix<scalar_t, 18, 18> a_;
-  Eigen::Matrix<scalar_t, 18, 18> q_;
-  Eigen::Matrix<scalar_t, 18, 18> p_;
-  Eigen::Matrix<scalar_t, 28, 28> r_;
-  Eigen::Matrix<scalar_t, 18, 3> b_;
-  Eigen::Matrix<scalar_t, 28, 18> c_;
+  size_t numContacts_, dimContacts_, numState_, numObserve_;
+
+  matrix_t a_, b_, c_, q_, p_, r_;
+  vector_t xHat_, ps_, vs_;
+
+  feet_array_t<double> planeHeights_{0, 0, 0, 0};
+  feet_array_t<bool> layerChanged_{false, false, false, false};
 
   // Topic
   ros::Subscriber sub_;
@@ -62,6 +62,9 @@ class KalmanFilterEstimate : public StateEstimateBase {
   tf2::Transform world2odom_;
   std::string frameOdom_, frameGuess_;
   bool topicUpdated_;
+
+  grid_map::GridMap map;
+  ros::Subscriber map_sub;
 };
 
 }  // namespace legged

@@ -20,6 +20,7 @@
         "xstring": "cpp",
         "xutility": "cpp",
         "core": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "random": "cpp"
     }
 }

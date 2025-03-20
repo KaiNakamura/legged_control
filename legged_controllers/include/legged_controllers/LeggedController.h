@@ -52,19 +52,19 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   std::vector<ContactSensorHandle> contactHandles_;
   hardware_interface::ImuSensorHandle imuSensorHandle_;
 
-  ros::Publisher leg1_contact_force_pub;
-  ros::Publisher leg2_contact_force_pub;
-  ros::Publisher leg3_contact_force_pub;
-  ros::Publisher leg4_contact_force_pub;
+  ros::Publisher leg1_contact_sensor_pub;
+  ros::Publisher leg2_contact_sensor_pub;
+  ros::Publisher leg3_contact_sensor_pub;
+  ros::Publisher leg4_contact_sensor_pub;
 
   ros::Publisher leg1_force_sensor_pub;
 
   ros::Publisher height_pub;
 
-  std_msgs::Int16 leg1_contact_force;
-  std_msgs::Int16 leg2_contact_force;
-  std_msgs::Int16 leg3_contact_force;
-  std_msgs::Int16 leg4_contact_force;
+  std_msgs::Int16 leg1_contact_sensor;
+  std_msgs::Int16 leg2_contact_sensor;
+  std_msgs::Int16 leg3_contact_sensor;
+  std_msgs::Int16 leg4_contact_sensor;
 
   std_msgs::Int16 leg1_force_sensor;
   

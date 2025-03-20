@@ -32,7 +32,6 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   tau_filtered_prev = Eigen::MatrixXd::Zero(model.nv, 1);
   tau_filtered_curr = Eigen::MatrixXd::Zero(model.nv, 1);
   tau_unfiltered_prev = Eigen::MatrixXd::Zero(model.nv, 1);
-  tau_unfiltered_curr = Eigen::MatrixXd::Zero(model.nv, 1);
   tau_measured_prev = Eigen::MatrixXd::Zero(model.nv, 1);
   tau_measured_curr = Eigen::MatrixXd::Zero(model.nv, 1);
 
@@ -72,7 +71,7 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
 
 size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
   scalar_t dt = period.toSec();
-  
+  // std::cout << dt << std::endl;
   // Get state joint measurements from RBD
   qMeasured_.head<3>() = rbdStateMeasured.segment<3>(3);
   qMeasured_.segment<3>(3) = rbdStateMeasured.head<3>();
@@ -92,8 +91,14 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   Eigen::MatrixXd g(info_.generalizedCoordinatesNum, 1);
   Eigen::MatrixXd p(info_.generalizedCoordinatesNum, 1);
 
-  double frequencyCutoff = 15; // lambda in the paper
+  double frequencyCutoff = 15; 
   double zDomainCutoff = exp(-frequencyCutoff * dt); // gamma in paper, given by e^(-lambda*dt), currently using average of 0.001
+
+  double zDomainCutoff5 = exp(-5 * dt);
+  double zDomainCutoff15 = exp(-15 * dt);
+  double zDomainCutoff1 = exp(-100 * dt);
+  double zDomainCutoff500 = exp(-500 * dt);
+
   double beta = (1 - zDomainCutoff)/zDomainCutoff/dt;
 
   // Update algorithm, may be inefficient as this is also run in WbcBase
@@ -132,20 +137,17 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
     }
   }
   
-  // Update current tau
-  tau_unfiltered_curr = j_.transpose() * input.head(3*info_.numThreeDofContacts);
-
   // Update in laplace space
 
   // Update in zeta domain
   tau_measured_curr = beta*p + ST*torque + C.transpose()*vMeasured_ - g;
-  tau_filtered_curr = -beta*p + zDomainCutoff*beta*p_prev -(1 - zDomainCutoff)*tau_measured_curr + zDomainCutoff*tau_measured_prev; //Note: I am not 100% confident on the signs here
+  tau_filtered_curr = beta*p - zDomainCutoff*beta*p_prev -(1 - zDomainCutoff)*tau_measured_curr + zDomainCutoff*tau_measured_prev; //Note: I am not 100% confident on the signs here
 
+  // std::cout << tau_filtered_curr5 << std::endl << tau_filtered_curr15 << std::endl << tau_filtered_curr500 << std::endl << tau_filtered_curr1 << std::endl;
   // Calculate the estimation of the applied force... also make it negative idk why it came out all the wrong sign
   Eigen::MatrixXd force_estimated = -(ST.transpose()*j_.transpose()).completeOrthogonalDecomposition().pseudoInverse()*ST.transpose()*tau_filtered_curr;
 
   // std::cout << "tau_filtered_curr: " << tau_filtered_curr.transpose() << std::endl;
-  // std::cout << "tau_unfiltered_curr: " << tau_unfiltered_curr.transpose() << std::endl;
   // std::cout << "tau_measured_curr: " << tau_measured_curr.transpose() << std::endl;  
   // std::cout << "tau_filtered_prev: " << tau_filtered_prev.transpose() << std::endl;
   // std::cout << "tau_unfiltered_prev: " << tau_unfiltered_prev.transpose() << std::endl;  
@@ -167,7 +169,6 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   // std::cout << std::endl;
 
   // update previous taus
-  tau_unfiltered_prev = tau_unfiltered_curr;
   tau_filtered_prev = tau_filtered_curr;
   tau_measured_prev = tau_measured_curr;
   p_prev = p;
@@ -198,13 +199,13 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   std::vector<vector3_t> footPos = eeKinematics_->getPosition(vector_t()); // I hate this notation but it's native to pinocchio interface
 
   // for(int i = 0; i < info_.numThreeDofContacts; i++){
-    // std::cout << "Foot " << i << ": " << footPos[i].transpose() << " ";
+  //   std::cout << "Contact Estimation Foot " << i << ": " << footPos[i].transpose() << " ";
   // }
   // std::cout << std::endl;
 
-  if(hasMap){
-    std::vector<Eigen::MatrixXd> weightedHeight = sampleHeights(footPos, 0);
-    std::vector<Eigen::MatrixXd> weightedVariance = weightVariances(footPos, 1);
+  if(map.exists("elevation")){
+    std::vector<Eigen::MatrixXd> weightedHeight = sampleHeights(footPos, 1);
+    std::vector<Eigen::MatrixXd> weightedVariance = weightVariances(footPos, 2);
 
     for(int i = 0; i < info_.numThreeDofContacts; i++){
       mean_zg[i] = weightedHeight[0](i);
@@ -214,12 +215,8 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
     }
     // std::cout << "Kalman foot height: " << weightedHeight[0] << std::endl;
     // std::cout << "Kalman foot variance: " << weightedVariance[0] << std::endl;
-      // mean_zg = weightedHeight[0](0);
-      // variance_zg = weightedHeight[1](0);
-
-      // std::cout << "Height: " << mean_zg[i] << std::endl << "Variance: " << variance_zg[i] << std::endl;
+    // std::cout << "Height: " << mean_zg[i] << std::endl << "Variance: " << variance_zg[i] << std::endl;
   }
-
 
   Eigen::MatrixXd contact_probability_height = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
@@ -376,7 +373,6 @@ void ContactEstimate::getForceReadings(const sensor_msgs::JointState msg){
 }
 
 void ContactEstimate::getMap(const grid_map_msgs::GridMap& msg){
-  hasMap = true;
   grid_map::GridMapRosConverter::fromMessage(msg, map);
 }
 
