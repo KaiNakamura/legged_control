@@ -42,10 +42,10 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
 
   ros::NodeHandle nh;
 
-  leg1_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg1_contact", 10);
-  leg2_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg2_contact", 10);
-  leg3_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg3_contact", 10);
-  leg4_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg4_contact", 10);
+  leg1_contact_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg1_contact", 10);
+  leg2_contact_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg2_contact", 10);
+  leg3_contact_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg3_contact", 10);
+  leg4_contact_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg4_contact", 10);
 
   leg1_contact_prob_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_contact_prob", 10);
   leg2_contact_prob_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg2_contact_prob", 10);
@@ -320,29 +320,29 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg1_variance.data = variance_zg[0];
 
   // Publish ros msgs
-  leg1_contact_pub.publish(leg1_contact);
-  leg2_contact_pub.publish(leg2_contact);
-  leg3_contact_pub.publish(leg3_contact);
-  leg4_contact_pub.publish(leg4_contact);
+  // leg1_contact_pub.publish(leg1_contact);
+  // leg2_contact_pub.publish(leg2_contact);
+  // leg3_contact_pub.publish(leg3_contact);
+  // leg4_contact_pub.publish(leg4_contact);
 
-  leg1_contact_prob_pub.publish(leg1_contact_prob);
-  leg2_contact_prob_pub.publish(leg2_contact_prob);
-  leg3_contact_prob_pub.publish(leg3_contact_prob);
-  leg4_contact_prob_pub.publish(leg4_contact_prob);
+  // leg1_contact_prob_pub.publish(leg1_contact_prob);
+  // leg2_contact_prob_pub.publish(leg2_contact_prob);
+  // leg3_contact_prob_pub.publish(leg3_contact_prob);
+  // leg4_contact_prob_pub.publish(leg4_contact_prob);
 
-  leg1_contact_prob_time_pub.publish(leg1_contact_prob_time);
-  leg1_contact_prob_height_pub.publish(leg1_contact_prob_height);
-  leg1_contact_prob_force_pub.publish(leg1_contact_prob_force);
-  leg1_contact_prob_force_sensors_pub.publish(leg1_contact_prob_force_sensors);
+  // leg1_contact_prob_time_pub.publish(leg1_contact_prob_time);
+  // leg1_contact_prob_height_pub.publish(leg1_contact_prob_height);
+  // leg1_contact_prob_force_pub.publish(leg1_contact_prob_force);
+  // leg1_contact_prob_force_sensors_pub.publish(leg1_contact_prob_force_sensors);
 
-  leg1_force_pub.publish(leg1_force);
-  leg2_force_pub.publish(leg2_force);
-  leg3_force_pub.publish(leg3_force);
-  leg4_force_pub.publish(leg4_force);
+  // leg1_force_pub.publish(leg1_force);
+  // leg2_force_pub.publish(leg2_force);
+  // leg3_force_pub.publish(leg3_force);
+  // leg4_force_pub.publish(leg4_force);
 
-  leg1_height_pub.publish(leg1_height);
-  leg1_variance_pub.publish(leg1_variance);
-  leg1_foothold_pub.publish(leg1_foothold);
+  // leg1_height_pub.publish(leg1_height);
+  // leg1_variance_pub.publish(leg1_variance);
+  // leg1_foothold_pub.publish(leg1_foothold);
 
   return mode_detected;
 }

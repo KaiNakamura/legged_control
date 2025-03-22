@@ -17,6 +17,8 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/JointState.h>
 #include <vector>
+#include "FaceLightClient.h"
+#include "std_msgs/Bool.h"
 
 #define NUM_DOF 12
 #define NUM_LEG 4
@@ -78,14 +80,17 @@ class UnitreeHW : public LeggedHW {
 
   bool setupContactSensor(ros::NodeHandle& nh);
 
+
   std::shared_ptr<UNITREE_LEGGED_SDK::UDP> udp_;
   std::shared_ptr<UNITREE_LEGGED_SDK::Safety> safety_;
   UNITREE_LEGGED_SDK::LowState lowState_{};
   UNITREE_LEGGED_SDK::LowCmd lowCmd_{};
+  UNITREE_LEGGED_SDK::LED led_{};
 
   UnitreeMotorData jointData_[12]{};  // NOLINT(modernize-avoid-c-arrays)
   UnitreeImuData imuData_{};
   bool contactState_[4]{};  // NOLINT(modernize-avoid-c-arrays)
+  bool contactStatePrev_[4]{};
 
   double contactBias_[4]{};
   bool first_contact_force_read;
@@ -97,10 +102,14 @@ class UnitreeHW : public LeggedHW {
   // ros message and publisher for vilo
   sensor_msgs::JointState joint_foot_msg;
   sensor_msgs::Imu imu_msg;
+
   ros::Publisher imu_pub;
   ros::Publisher joint_foot_pub;
+
   std::vector<int> swap_joint_indices;
   std::vector<int> swap_foot_indices;
+
+  FaceLightClient light_client_;
 };
 
 }  // namespace legged

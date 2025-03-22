@@ -24,7 +24,7 @@ bool UnitreeHW::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh) {
   setupJoints();
   setupImu();
   setupContactSensor(robot_hw_nh);
-
+  
 #ifdef UNITREE_SDK_3_3_1
   udp_ = std::make_shared<UNITREE_LEGGED_SDK::UDP>(UNITREE_LEGGED_SDK::LOWLEVEL);
 #elif UNITREE_SDK_3_8_0
@@ -98,13 +98,14 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
     if (timeSinceStart < 0.5) {
       for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
         contactBias_[i] = lowState_.footForce[i];
-        contactState_[i] = 0;
+        contactState_[i] = 1;
+        contactStatePrev_[i] = 1;
       }
     } else {
-      for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
+      // for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
         // FR FL RR RL
-        contactState_[i] = (lowState_.footForce[i] - contactBias_[i]) > contactThreshold_;
-      }
+        // contactState_[i] = (lowState_.footForce[i] - contactBias_[i]) > contactThreshold_;
+      // }
     }
   }
 
@@ -168,6 +169,26 @@ void UnitreeHW::write(const ros::Time& /*time*/, const ros::Duration& /*period*/
   safety_->PowerProtect(lowCmd_, lowState_, powerLimit_);
   udp_->SetSend(lowCmd_);
   udp_->Send();
+
+  for (int i = 0; i < 12; ++i) {
+    if(contactState_[swap_foot_indices[i / 3]] != contactStatePrev_[swap_foot_indices[i / 3]]){
+      uint8_t color[3] = {0, 0, 0};
+
+      // FR FL RR RL
+      if(contactState_[swap_foot_indices[i / 3]]){
+        color[1] = 255;
+      }
+      else{
+        color[0] = 255;
+      }
+      light_client_.setLedColor(i, color);
+      light_client_.sendCmd();
+
+      if(i % 3 == 2){
+        contactStatePrev_[swap_foot_indices[i / 3]] = contactState_[swap_foot_indices[i / 3]];
+      }
+    }
+  }
 }
 
 bool UnitreeHW::setupJoints() {
@@ -228,5 +249,4 @@ bool UnitreeHW::setupContactSensor(ros::NodeHandle& nh) {
   }
   return true;
 }
-
 }  // namespace legged

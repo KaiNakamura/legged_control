@@ -17,7 +17,7 @@
 #include <ocs2_core/reference/ModeSchedule.h>
 #include <ocs2_legged_robot/gait/MotionPhaseDefinition.h>
 
-#include "std_msgs/Int16.h"
+#include "std_msgs/Bool.h"
 #include "std_msgs/Float64.h"
 #include <sensor_msgs/JointState.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -130,10 +130,10 @@ class ContactEstimate{
   ros::Publisher leg1_variance_pub;
   ros::Publisher leg1_foothold_pub;
 
-  std_msgs::Int16 leg1_contact;
-  std_msgs::Int16 leg2_contact;
-  std_msgs::Int16 leg3_contact;
-  std_msgs::Int16 leg4_contact;
+  std_msgs::Bool leg1_contact;
+  std_msgs::Bool leg2_contact;
+  std_msgs::Bool leg3_contact;
+  std_msgs::Bool leg4_contact;
 
   std_msgs::Float64 leg1_contact_prob;
   std_msgs::Float64 leg2_contact_prob;

@@ -10,7 +10,7 @@ class ContactSensorHandle {
  public:
   ContactSensorHandle() = default;
 
-  ContactSensorHandle(const std::string& name, const bool* isContact) : name_(name), isContact_(isContact) {
+  ContactSensorHandle(const std::string& name, bool* isContact) : name_(name), isContact_(isContact) {
     if (isContact == nullptr) {
       throw hardware_interface::HardwareInterfaceException("Cannot create handle '" + name + "'. isContact pointer is null.");
     }
@@ -23,10 +23,15 @@ class ContactSensorHandle {
     return *isContact_;
   }
 
+  void setContact(bool cmd) const {
+    assert(isContact_);
+    *isContact_ = cmd;
+  }
+
  private:
   std::string name_;
 
-  const bool* isContact_ = {nullptr};
+  bool* isContact_ = {nullptr};
 };
 
 class ContactSensorInterface

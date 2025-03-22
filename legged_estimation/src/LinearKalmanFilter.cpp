@@ -104,7 +104,7 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     bool isChangeHigh = contactChanged_[i] & contactFlag_[i];
 
     scalar_t high_suspect_number(1000000);
-    scalar_t low_suspect_number(0.0000001);
+    scalar_t low_suspect_number(footSensorNoisePosition_/10);
     q.block(qIndex, qIndex, 3, 3) = (isContact ? 1. : high_suspect_number) * q.block(qIndex, qIndex, 3, 3);
     r.block(rIndex1, rIndex1, 3, 3) = (isContact ? 1. : high_suspect_number) * r.block(rIndex1, rIndex1, 3, 3);
     r.block(rIndex2, rIndex2, 3, 3) = (isContact ? 1. : high_suspect_number) * r.block(rIndex2, rIndex2, 3, 3);
@@ -127,8 +127,8 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     //   }
     // }
 
-    r(rIndex1 + 2, rIndex1 + 2) = (isChangeHigh ? 1. : low_suspect_number) * r(rIndex1 + 2, rIndex1 + 2);
-    q(qIndex + 2, qIndex + 2) = (isChangeHigh ? 1. : low_suspect_number) * q(qIndex + 2, qIndex + 2);
+    // r(rIndex1 + 2, rIndex1 + 2) = (isChangeHigh ? 1. : low_suspect_number) * r(rIndex1 + 2, rIndex1 + 2);
+    // q(qIndex + 2, qIndex + 2) = (isChangeHigh ? 1. : low_suspect_number) * q(qIndex + 2, qIndex + 2);
 
     ps_.segment(3 * i, 3) = -eePos[i];
     ps_.segment(3 * i, 3)[2] += footRadius_;
