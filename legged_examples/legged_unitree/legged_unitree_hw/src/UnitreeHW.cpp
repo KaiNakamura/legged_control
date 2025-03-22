@@ -182,10 +182,10 @@ void UnitreeHW::write(const ros::Time& /*time*/, const ros::Duration& /*period*/
         color[0] = 255;
       }
       light_client_.setLedColor(i, color);
-      light_client_.sendCmd();
 
       if(i % 3 == 2){
         contactStatePrev_[swap_foot_indices[i / 3]] = contactState_[swap_foot_indices[i / 3]];
+        light_client_.sendCmd();
       }
     }
   }
