@@ -61,12 +61,12 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
 
   ros::Publisher height_pub;
 
-  std_msgs::Bool leg1_contact_sensor;
-  std_msgs::Bool leg2_contact_sensor;
-  std_msgs::Bool leg3_contact_sensor;
-  std_msgs::Bool leg4_contact_sensor;
+  std_msgs::Int16 leg1_contact_sensor;
+  std_msgs::Int16 leg2_contact_sensor;
+  std_msgs::Int16 leg3_contact_sensor;
+  std_msgs::Int16 leg4_contact_sensor;
 
-  std_msgs::Bool leg1_force_sensor;
+  std_msgs::Int16 leg1_force_sensor;
   
   std_msgs::Float64 height;
 

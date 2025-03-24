@@ -207,9 +207,9 @@ void LeggedController::updateStateEstimation(const ros::Time& time, const ros::D
   }
 
   stateEstimate_->updateJointStates(jointPos, jointVel);
-  // if(mpcRunning_ && measuredRbdState_(5) > 0.15){
-  //   contactFlag = modeNumber2StanceLeg(updatedMode);
-  // }
+  if(mpcRunning_ && measuredRbdState_(5) > 0.15){
+    contactFlag = modeNumber2StanceLeg(updatedMode);
+  }
   stateEstimate_->updateContact(contactFlag);
   stateEstimate_->updateImu(quat, angularVel, linearAccel, orientationCovariance, angularVelCovariance, linearAccelCovariance);
   measuredRbdState_ = stateEstimate_->update(time, period);
@@ -253,16 +253,16 @@ void LeggedController::setupMpc() {
   auto gaitReceiverPtr =
       std::make_shared<GaitReceiver>(nh, leggedInterface_->getSwitchedModelReferenceManagerPtr()->getGaitSchedule(), robotName);
   // ROS ReferenceManager
-  auto rosReferenceManagerPtr = std::make_shared<RosReferenceManager>(robotName, leggedInterface_->getReferenceManagerPtr());
+  auto rosReferenceManagerPtr = std::make_shared<cout>(robotName, leggedInterface_->getReferenceManagerPtr());
   rosReferenceManagerPtr->subscribe(nh);
   mpc_->getSolverPtr()->addSynchronizedModule(gaitReceiverPtr);
   mpc_->getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);
   observationPublisher_ = nh.advertise<ocs2_msgs::mpc_observation>(robotName + "_mpc_observation", 1);
 
-  leg1_contact_sensor_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg1_contact_sensor", 10);
-  leg2_contact_sensor_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg2_contact_sensor", 10);
-  leg3_contact_sensor_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg3_contact_sensor", 10);
-  leg4_contact_sensor_pub = nh.advertise<std_msgs::Bool>("contact_estimation/leg4_contact_sensor", 10);
+  leg1_contact_sensor_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg1_contact_sensor", 10);
+  leg2_contact_sensor_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg2_contact_sensor", 10);
+  leg3_contact_sensor_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg3_contact_sensor", 10);
+  leg4_contact_sensor_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg4_contact_sensor", 10);
 
   height_pub = nh.advertise<std_msgs::Float64>("contact_estimation/height", 10);
 }

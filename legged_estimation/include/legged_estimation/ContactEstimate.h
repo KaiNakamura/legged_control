@@ -17,7 +17,7 @@
 #include <ocs2_core/reference/ModeSchedule.h>
 #include <ocs2_legged_robot/gait/MotionPhaseDefinition.h>
 
-#include "std_msgs/Bool.h"
+#include "std_msgs/Int16.h"
 #include "std_msgs/Float64.h"
 #include <sensor_msgs/JointState.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -52,7 +52,7 @@ class ContactEstimate{
   std::vector<Eigen::MatrixXd> KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
   std::vector<Eigen::MatrixXd> sampleHeights(std::vector<vector3_t> position, int radius);
   std::vector<Eigen::MatrixXd> weightVariances(std::vector<vector3_t> position, int radius);
-  double zTestWeighting(double z_score);
+  double getKalmanProbability(double detection_mean, double measurement_mean, double measurement_variance);
 
   PinocchioInterface pinocchioInterface_;
   CentroidalModelInfo info_;
@@ -72,10 +72,10 @@ class ContactEstimate{
   Eigen::Matrix<double, Eigen::Dynamic, 1> p_prev;
 
   // Initialize parameters as defined in contact estimation paper
-  double mean_not_c0 = 0;
+  double mean_not_c0 = -0.01;
   double mean_not_c1 = 1;
   double mean_c0 = 0;
-  double mean_c1 = 1;
+  double mean_c1 = 0.99;
 
   double variance_not_c0 = 0.1;
   double variance_not_c1 = 0.1;
@@ -95,15 +95,27 @@ class ContactEstimate{
   
   bool map_recieved = false;
 
-  double mean_force = 30;
-  double variance_force = 15;
+  double mean_force = 40;
+  double variance_force = 20;
 
-  double contact_likelihood_cutoff = 0.5;
-  double contact_loss_likelihood_cutoff = 0.4;
+  double contact_likelihood_cutoff = 0.6;
+  double contact_loss_likelihood_cutoff = 0.5;
   bool contact[4] = {false, false, false, false};
 
-  double mean_force_sensor = 80;
-  double variance_force_sensor = 40;
+  double mean_force_sensor = 50;
+  double variance_force_sensor = 20;
+
+  double contact_mean_force = 100;
+  double contact_variance_force = 80;
+  double contact_mean_force_sensor = 200;
+  double contact_variance_force_sensor = 200;
+  double contact_mean_zg[4] = {0.0, 0.0, 0.0, 0.0};
+  double contact_variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
+
+  double kalman_variance_time = 0.5;
+  double kalman_variance_height[4] = {0.5, 0.5, 0.5, 0.5};
+  double kalman_variance_force = 0.5;
+  double kalman_variance_force_sensors = 0.5;
 
   ros::Publisher leg1_contact_pub;
   ros::Publisher leg2_contact_pub;
@@ -130,10 +142,10 @@ class ContactEstimate{
   ros::Publisher leg1_variance_pub;
   ros::Publisher leg1_foothold_pub;
 
-  std_msgs::Bool leg1_contact;
-  std_msgs::Bool leg2_contact;
-  std_msgs::Bool leg3_contact;
-  std_msgs::Bool leg4_contact;
+  std_msgs::Int16 leg1_contact;
+  std_msgs::Int16 leg2_contact;
+  std_msgs::Int16 leg3_contact;
+  std_msgs::Int16 leg4_contact;
 
   std_msgs::Float64 leg1_contact_prob;
   std_msgs::Float64 leg2_contact_prob;

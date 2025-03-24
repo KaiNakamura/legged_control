@@ -14,6 +14,8 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <grid_map_ros/grid_map_ros.hpp>
+#include "std_msgs/Float64.h"
+#include <ocs2_robotic_tools/common/SkewSymmetricMatrix.h>
 
 namespace legged {
 using namespace ocs2;
@@ -48,7 +50,36 @@ class KalmanFilterEstimate : public StateEstimateBase {
  private:
   size_t numContacts_, dimContacts_, numState_, numObserve_;
 
+  ros::Publisher heightChangeIMU;
+  ros::Publisher accz_pub;
+  ros::Publisher vz_pub;
+  ros::Publisher heightChangeLegs;
+  ros::Publisher heightChange;
+
+  ros::Publisher yz1;
+  ros::Publisher yz2;
+  ros::Publisher yz3;
+  ros::Publisher yz4;
+  ros::Publisher ymodelz1;
+  ros::Publisher ymodelz2;
+  ros::Publisher ymodelz3;
+  ros::Publisher ymodelz4;
+  ros::Publisher eyz1;
+  ros::Publisher eyz2;
+  ros::Publisher eyz3;
+  ros::Publisher eyz4;
+
+  ros::Publisher pz1;
+  ros::Publisher pz2;
+  ros::Publisher pz3;
+  ros::Publisher pz4;
+  ros::Publisher rz;
   matrix_t a_, b_, c_, q_, p_, r_;
+
+  // Xhat previous = {r_3x3; v_3x3; ps_12x3}
+  // ps = ee locations
+  // Xhat now = {r_3x3;v_3x3; q_4x3, ps_12x3}
+  // q is the quaternion
   vector_t xHat_, ps_, vs_;
 
   feet_array_t<double> planeHeights_{0, 0, 0, 0};
