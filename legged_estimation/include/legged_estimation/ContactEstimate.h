@@ -72,10 +72,10 @@ class ContactEstimate{
   Eigen::Matrix<double, Eigen::Dynamic, 1> p_prev;
 
   // Initialize parameters as defined in contact estimation paper
-  double mean_not_c0 = -0.01;
+  double mean_not_c0 = 0;
   double mean_not_c1 = 1;
   double mean_c0 = 0;
-  double mean_c1 = 0.99;
+  double mean_c1 = 1;
 
   double variance_not_c0 = 0.1;
   double variance_not_c1 = 0.1;
@@ -95,11 +95,11 @@ class ContactEstimate{
   
   bool map_recieved = false;
 
-  double mean_force = 40;
+  double mean_force = 20;
   double variance_force = 20;
 
-  double contact_likelihood_cutoff = 0.6;
-  double contact_loss_likelihood_cutoff = 0.5;
+  double contact_likelihood_cutoff = 0.4;
+  double contact_loss_likelihood_cutoff = 0.3;
   bool contact[4] = {false, false, false, false};
 
   double mean_force_sensor = 50;
@@ -112,10 +112,10 @@ class ContactEstimate{
   double contact_mean_zg[4] = {0.0, 0.0, 0.0, 0.0};
   double contact_variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
-  double kalman_variance_time = 0.2;
-  double kalman_variance_height[4] = {0.4, 0.4, 0.4, 0.4};
-  double kalman_variance_force = 0.5;
-  double kalman_variance_force_sensors = 0.5;
+  double kalman_variance_time = 0.8;
+  double kalman_variance_height[4] = {100, 100, 100, 100};
+  double kalman_variance_force = 1;
+  double kalman_variance_force_sensors = 5;
 
   bool contact_time_diff[4] = {false, false, false, false};
 

@@ -43,8 +43,8 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
 
   ros::NodeHandle nh;
 
-  kalman_variance_force = getKalmanProbability(mean_force, contact_mean_force, contact_variance_force);
-  kalman_variance_force_sensors = getKalmanProbability(mean_force_sensor, contact_mean_force_sensor, contact_variance_force_sensor);
+  // kalman_variance_force = getKalmanProbability(mean_force, contact_mean_force, contact_variance_force);
+  // kalman_variance_force_sensors = getKalmanProbability(mean_force_sensor, contact_mean_force_sensor, contact_variance_force_sensor);
 
   leg1_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg1_contact", 10);
   leg2_contact_pub = nh.advertise<std_msgs::Int16>("contact_estimation/leg2_contact", 10);
@@ -187,21 +187,21 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
     contact_probability_time(i) = calculateContactProbabilityTime(modeNumber2StanceLeg(modeSchedule_.modeAtTime(time))[i], modeSchedule_.percentageAtTime(time));
   }
 
-  double variance_time;
-  double loss_cutoff;
-  if(modeSchedule_.modeAtTime(time) == 15){
-    variance_time = 0.1;
-    loss_cutoff = 0.3;
-  }
-  else{
-    variance_time = kalman_variance_time;
-    loss_cutoff = contact_loss_likelihood_cutoff;
-  }
+  // double variance_time;
+  // double loss_cutoff;
+  // if(modeSchedule_.modeAtTime(time) == 15){
+  //   variance_time = 0.1;
+  //   loss_cutoff = 0.3;
+  // }
+  // else{
+  //   variance_time = kalman_variance_time;
+  //   loss_cutoff = contact_loss_likelihood_cutoff;
+  // }
 
   Eigen::MatrixXd contact_variance_time = Eigen::MatrixXd(info_.numThreeDofContacts, info_.numThreeDofContacts);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
 
-    contact_variance_time(i,i) = variance_time;
+    contact_variance_time(i,i) = kalman_variance_time;
     // if(contactFlag[i]){
     //   contact_variance_time(i,i) = variance_c1;
     // }
@@ -234,9 +234,9 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   }
 
   // std::cout << "contact variance force sensor: " << std::endl << contact_variance_force_sensor.transpose() << std::endl;
-  for(int i = 0; i < info_.numThreeDofContacts; i++){
-    kalman_variance_height[i] = getKalmanProbability(mean_zg[i], mean_zg[i] - foot_offset, variance_zg[i]);
-  }
+  // for(int i = 0; i < info_.numThreeDofContacts; i++){
+  //   kalman_variance_height[i] = getKalmanProbability(mean_zg[i], mean_zg[i] - foot_offset, variance_zg[i]);
+  // }
   Eigen::MatrixXd contact_probability_height = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
     contact_probability_height(i) = calculateContactProbabilityFootHeight(footPos[i](2), i);
@@ -297,7 +297,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
 
   for(int i = 0; i < info_.numThreeDofContacts; i++){
     if(contact[i]){
-      contact[i] = contact_probability_overall(i) > loss_cutoff;
+      contact[i] = contact_probability_overall(i) > contact_loss_likelihood_cutoff;
     }
     else{
       contact[i] = contact_probability_overall(i) > contact_likelihood_cutoff;
@@ -310,21 +310,21 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
       mode_detected += (int) pow(2, i);
       // mean_zg[i] = footPos[i](2) + 0.05;
     }
-
-    if(modeNumber2StanceLeg(modeSchedule_.modeAtTime(time))[i] && !contact[i]){
-      contact_time_diff[i] = true;
-    }
-
-    if(contact[i] && contact_time_diff[i]){
-      contact_time_diff[i] = false;
-
-      const auto ind = lookup::findIndexInTimeArray(modeSchedule_.eventTimes, time);
-      double time_diff = time - modeSchedule_.eventTimes[ind];
-      for(int j = 0; j < modeSchedule_.eventTimes.size(); j++){
-        modeSchedule_.eventTimes[j] += time_diff;
-      }
-    }
   }
+  //   if(modeNumber2StanceLeg(modeSchedule_.modeAtTime(time))[i] && !contact[i]){
+  //     contact_time_diff[i] = true;
+  //   }
+
+  //   if(contact[i] && contact_time_diff[i]){
+  //     contact_time_diff[i] = false;
+
+  //     const auto ind = lookup::findIndexInTimeArray(modeSchedule_.eventTimes, time);
+  //     double time_diff = time - modeSchedule_.eventTimes[ind];
+  //     for(int j = 0; j < modeSchedule_.eventTimes.size(); j++){
+  //       modeSchedule_.eventTimes[j] += time_diff;
+  //     }
+  //   }
+  // }
 
   // Fill ros msgs
   leg1_contact.data = contact[0];
