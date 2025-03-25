@@ -18,7 +18,7 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
       numContacts_(info_.numThreeDofContacts + info_.numSixDofContacts),
       dimContacts_(3 * numContacts_),
       numState_(6 + dimContacts_),
-      numObserve_(2 * dimContacts_ + numContacts_),
+      numObserve_(2 * dimContacts_),
       tfListener_(tfBuffer_),
       topicUpdated_(false) {
   xHat_.setZero(numState_);
@@ -33,7 +33,6 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
   for (ssize_t i = 0; i < numContacts_; ++i) {
     c_.block(3 * i, 0, 3, 6) = c1;
     c_.block(3 * (numContacts_ + i), 0, 3, 6) = c2;
-    c_(2 * dimContacts_ + i, 6 + 3 * i + 2) = 1.0;
   }
   c_.block(0, 6, dimContacts_, dimContacts_) = -matrix_t::Identity(dimContacts_, dimContacts_);
 
@@ -122,8 +121,6 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   r.block(0, 0, dimContacts_, dimContacts_) = r_.block(0, 0, dimContacts_, dimContacts_) * footSensorNoisePosition_;
   r.block(dimContacts_, dimContacts_, dimContacts_, dimContacts_) =
       r_.block(dimContacts_, dimContacts_, dimContacts_, dimContacts_) * footSensorNoiseVelocity_;
-  r.block(2 * dimContacts_, 2 * dimContacts_, numContacts_, numContacts_) =
-      r_.block(2 * dimContacts_, 2 * dimContacts_, numContacts_, numContacts_) * footHeightSensorNoise_;
 
   for (int i = 0; i < numContacts_; i++) {
     int i1 = 3 * i;
@@ -140,7 +137,6 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     q.block(qIndex, qIndex, 3, 3) = (isContact ? 1. : high_suspect_number) * q.block(qIndex, qIndex, 3, 3);
     r.block(rIndex1, rIndex1, 3, 3) = (isContact ? 1. : high_suspect_number) * r.block(rIndex1, rIndex1, 3, 3);
     r.block(rIndex2, rIndex2, 3, 3) = (isContact ? 1. : high_suspect_number) * r.block(rIndex2, rIndex2, 3, 3);
-    r(rIndex3, rIndex3) = (isContact ? 1. : high_suspect_number) * r(rIndex3, rIndex3);
 
     // if(map.exists("elevation")){
     //   double planeHeight = map.atPosition("elevation", rbdState_.segment<2>(3) + ps_.segment(3 * i, 3).head<2>());
@@ -162,6 +158,10 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     // r(rIndex1 + 2, rIndex1 + 2) = (isChangeHigh ? 1. : low_suspect_number) * r(rIndex1 + 2, rIndex1 + 2);
     // q(qIndex + 2, qIndex + 2) = (isChangeHigh ? 1. : low_suspect_number) * q(qIndex + 2, qIndex + 2);
 
+    // if(isChangeHigh){
+    //   xHat[i] = 
+    // }
+
     ps_.segment(3 * i, 3) = -eePos[i];
     ps_.segment(3 * i, 3)[2] += footRadius_;
     vs_.segment(3 * i, 3) = -eeVel[i];
@@ -172,7 +172,7 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
 
   vector_t y(numObserve_);
   // z
-  y << ps_, vs_, feetHeights_;
+  y << ps_, vs_;
 
   // x_k|k-1 = f(x_k-1|k-1, u _k-1)
   std_msgs::Float64 heightIMU_msg;
@@ -190,29 +190,35 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   xHat_ = a_ * xHat_ + b_ * accel;
   matrix_t at = a_.transpose();
 
+  for (int i = 0; i < numContacts_; i++) {
+    if(!contactFlag_[i]){
+      xHat_(8 + 3*i) = xHat_(2) - ps_(2 + 3*i);
+    }
+  }
+
   // P = FPF^T + Q
   matrix_t pm = a_ * p_ * at + q;
-  matrix_t cT = c_.transpose();
+  matrix_t cT = c_.transpose(); 
   vector_t yModel = c_ * xHat_;
-  Eigen::Matrix<scalar_t, 3, 1> angVel = rbdState_.segment<3>(info_.generalizedCoordinatesNum);
+  // Eigen::Matrix<scalar_t, 3, 1> angVel = rbdState_.segment<3>(info_.generalizedCoordinatesNum);
 
-  for (int i = 0; i < numContacts_; i++) {
-    yModel.segment(3 * i, 3) -= dt*skewSymmetricMatrix(angVel) * (xHat_.segment(0, 3) - xHat_.segment(6 + 3 * i, 3));
-  }
+  // for (int i = 0; i < numContacts_; i++) {
+  //   yModel.segment(3 * i, 3) -= dt*skewSymmetricMatrix(angVel) * (xHat_.segment(0, 3) - xHat_.segment(6 + 3 * i, 3));
+  // }
 
-  // // // Convert y residual into body frame
-  Eigen::Matrix<scalar_t, 3, 1> orientation = rbdState_.head<3>();
-  matrix_t rot = getRotationMatrixFromZyxEulerAngles(orientation).transpose();
-  for (int i = 0; i < numContacts_; i++) {
-    y.segment(3 * i, 3) = rot * y.segment(3 * i, 3);
-    // yModel.segment(3 * i + dimContacts_, 3) = rot.transpose() * yModel.segment(3 * i, 3);
-    // ey(3*i + 2) = -ey(3*i + 2);
-    // ey(3 * i + dimContacts_ + 2) = -ey(3 * i + dimContacts_ + 2);
-  }
+  // // // // Convert y residual into body frame
+  // Eigen::Matrix<scalar_t, 3, 1> orientation = rbdState_.head<3>();
+  // matrix_t rot = getRotationMatrixFromZyxEulerAngles(orientation).transpose();
+  // for (int i = 0; i < numContacts_; i++) {
+  //   y.segment(3 * i, 3) = rot * y.segment(3 * i, 3);
+  //   // yModel.segment(3 * i + dimContacts_, 3) = rot.transpose() * yModel.segment(3 * i, 3);
+  //   // ey(3*i + 2) = -ey(3*i + 2);
+  //   // ey(3 * i + dimContacts_ + 2) = -ey(3 * i + dimContacts_ + 2);
+  // }
 
-  // std_msgs::Float64 yz1_msg;
-  // yz1_msg.data = y(2);
-  // yz1.publish(yz1_msg);
+  std_msgs::Float64 yz1_msg;
+  yz1_msg.data = y(2);
+  yz1.publish(yz1_msg);
 
   // std_msgs::Float64 yz2_msg;
   // yz2_msg.data = y(5);
@@ -226,9 +232,9 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   // yz4_msg.data = y(11);
   // yz4.publish(yz4_msg);
 
-  // std_msgs::Float64 ymodelz1_msg;
-  // ymodelz1_msg.data = yModel(2);
-  // ymodelz1.publish(ymodelz1_msg);
+  std_msgs::Float64 ymodelz1_msg;
+  ymodelz1_msg.data = yModel(2);
+  ymodelz1.publish(ymodelz1_msg);
   
   // std_msgs::Float64 ymodelz2_msg;
   // ymodelz2_msg.data = yModel(5);
@@ -282,43 +288,68 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   // std::cout << "Sey: " << std::endl << sEy.transpose() << std::endl;
   // std::cout << "pm: " << std::endl << pm << std::endl;
   // std::cout << "cT: " << std::endl << cT << std::endl;
-  vector_t Ky = pm * cT * sEy;
+  vector_t Ky = pm * cT * s.completeOrthogonalDecomposition().pseudoInverse() * ey;
   // Ky.head(6).setZero();
   // std::cout << "Ky: " << Ky.transpose() << std::endl;
   // Ky(2) = -Ky(2);
-  xHat_ += Ky;
+  // std::cout << "s: " << std::endl << s.diagonal() << std::endl;
+  // std::cout << "pm: " << std::endl << pm.diagonal() << std::endl;
+  // std::cout << "ey: " << std::endl << ey << std::endl;
   for (int i = 0; i < numContacts_; i++) {
-
+    // if(!contactFlag_[i]){
+      Ky(8 + 3*i) = 0;
+    // }
   }
+  // Ky(2) = 0;
+
+  std_msgs::Float64 rz_msg;
+  rz_msg.data = xHat_(2);
+  rz.publish(rz_msg);
+
+  xHat_ += Ky;
+
+  // double zsum = 0;
+  // for (int i = 0; i < numContacts_; i++) {
+  //   if(contactFlag_[i]){
+  //     zsum += ey(2 + 3*i);
+  //   }
+  // }
+  // xHat_(2) += dt*zsum;
+
   // std::cout << "xHat: " << xHat_.transpose() << std::endl;
 
   std_msgs::Float64 pz1_msg;
   pz1_msg.data = xHat_(8);
   pz1.publish(pz1_msg);
   
-  std_msgs::Float64 pz2_msg;
-  pz2_msg.data = xHat_(11);
-  pz2.publish(pz2_msg);  
+  // std_msgs::Float64 pz2_msg;
+  // pz2_msg.data = xHat_(11);
+  // pz2.publish(pz2_msg);  
   
-  std_msgs::Float64 pz3_msg;
-  pz3_msg.data = xHat_(14);
-  pz3.publish(pz3_msg);  
+  // std_msgs::Float64 pz3_msg;
+  // pz3_msg.data = xHat_(14);
+  // pz3.publish(pz3_msg);  
   
-  std_msgs::Float64 pz4_msg;
-  pz4_msg.data = xHat_(17);
-  pz4.publish(pz4_msg);  
-  
-  std_msgs::Float64 rz_msg;
-  rz_msg.data = xHat_(2);
-  rz.publish(rz_msg);
+  // std_msgs::Float64 pz4_msg;
+  // pz4_msg.data = xHat_(17);
+  // pz4.publish(pz4_msg);  
 
   std_msgs::Float64 heightLeg_msg;
   heightLeg_msg.data = Ky(2);
   heightChangeLegs.publish(heightLeg_msg);
 
+  // if(printCount % 500 == 0 || printCount % 500 == 1 || printCount % 500 == 2){
+    // std::cout << "p: " << std::endl << p_.diagonal() << std::endl;
+    // std::cout << "pm: " << std::endl << pm.diagonal() << std::endl;
+    // std::cout << "s: " << std::endl << s.completeOrthogonalDecomposition().pseudoInverse() << std::endl;
+    // std::cout << "r: " << std::endl << r.diagonal() << std::endl;
+    // std::cout << "cpc: " << std::endl << c_ * pm * cT << std::endl;
+  // }
+  // printCount += 1;
+
   // Combined equivalent to P_k = (I-KH)P_k-1
   matrix_t sC = s.lu().solve(c_);
-  p_ = (matrix_t::Identity(numState_, numState_) - pm * cT * sC) * pm;
+  p_ = (matrix_t::Identity(numState_, numState_) - pm * cT * s.completeOrthogonalDecomposition().pseudoInverse() * c_) * pm;
 
   matrix_t pt = p_.transpose();
   p_ = (p_ + pt) / 2.0;

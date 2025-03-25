@@ -87,7 +87,7 @@ class ContactEstimate{
   double foot_offset = 0.02;
   double mean_zg[4] = {foot_offset, foot_offset, foot_offset, foot_offset};
 
-  double joint_variance = 0.075;
+  double joint_variance = 0.05;
   double variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
   double force_sensor_readings[4] = {-1, -1, -1, -1};
@@ -112,10 +112,12 @@ class ContactEstimate{
   double contact_mean_zg[4] = {0.0, 0.0, 0.0, 0.0};
   double contact_variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
-  double kalman_variance_time = 0.5;
-  double kalman_variance_height[4] = {0.5, 0.5, 0.5, 0.5};
+  double kalman_variance_time = 0.2;
+  double kalman_variance_height[4] = {0.4, 0.4, 0.4, 0.4};
   double kalman_variance_force = 0.5;
   double kalman_variance_force_sensors = 0.5;
+
+  bool contact_time_diff[4] = {false, false, false, false};
 
   ros::Publisher leg1_contact_pub;
   ros::Publisher leg2_contact_pub;

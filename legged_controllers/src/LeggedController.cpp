@@ -253,7 +253,7 @@ void LeggedController::setupMpc() {
   auto gaitReceiverPtr =
       std::make_shared<GaitReceiver>(nh, leggedInterface_->getSwitchedModelReferenceManagerPtr()->getGaitSchedule(), robotName);
   // ROS ReferenceManager
-  auto rosReferenceManagerPtr = std::make_shared<cout>(robotName, leggedInterface_->getReferenceManagerPtr());
+  auto rosReferenceManagerPtr = std::make_shared<RosReferenceManager>(robotName, leggedInterface_->getReferenceManagerPtr());
   rosReferenceManagerPtr->subscribe(nh);
   mpc_->getSolverPtr()->addSynchronizedModule(gaitReceiverPtr);
   mpc_->getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);

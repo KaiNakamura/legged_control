@@ -96,6 +96,8 @@ class KalmanFilterEstimate : public StateEstimateBase {
 
   grid_map::GridMap map;
   ros::Subscriber map_sub;
+
+  int printCount = 0;
 };
 
 }  // namespace legged
