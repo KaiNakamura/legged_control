@@ -99,7 +99,7 @@ class ContactEstimate{
   double variance_force = 20;
 
   double contact_likelihood_cutoff = 0.4;
-  double contact_loss_likelihood_cutoff = 0.3;
+  double contact_loss_likelihood_cutoff = 0.4;
   bool contact[4] = {false, false, false, false};
 
   double mean_force_sensor = 50;
@@ -112,9 +112,9 @@ class ContactEstimate{
   double contact_mean_zg[4] = {0.0, 0.0, 0.0, 0.0};
   double contact_variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
-  double kalman_variance_time = 0.8;
-  double kalman_variance_height[4] = {100, 100, 100, 100};
-  double kalman_variance_force = 1;
+  double kalman_variance_time = 1;
+  double kalman_variance_height[4] = {0.6, 0.6, 0.6, 0.6};
+  double kalman_variance_force = 0.8;
   double kalman_variance_force_sensors = 5;
 
   bool contact_time_diff[4] = {false, false, false, false};

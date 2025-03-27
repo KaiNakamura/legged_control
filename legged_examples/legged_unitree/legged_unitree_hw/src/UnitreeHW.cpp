@@ -101,6 +101,9 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
         contactState_[i] = 1;
         contactStatePrev_[i] = 1;
       }
+      for(int i = 0; i < 3; i++){
+        imuBias_[i] = lowState_.imu.accelerometer[i];
+      }
     } else {
       // for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
         // FR FL RR RL
@@ -123,9 +126,9 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
   ros::Time now = ros::Time::now();
   imu_msg.header.stamp = now;
 
-  imu_msg.linear_acceleration.x = lowState_.imu.accelerometer[0];
-  imu_msg.linear_acceleration.y = lowState_.imu.accelerometer[1];
-  imu_msg.linear_acceleration.z = lowState_.imu.accelerometer[2];
+  imu_msg.linear_acceleration.x = lowState_.imu.accelerometer[0] - imuBias_[0];
+  imu_msg.linear_acceleration.y = lowState_.imu.accelerometer[1] - imuBias_[1];
+  imu_msg.linear_acceleration.z = lowState_.imu.accelerometer[2] - imuBias_[2];
 
   imu_msg.angular_velocity.x = lowState_.imu.gyroscope[0];
   imu_msg.angular_velocity.y = lowState_.imu.gyroscope[1];

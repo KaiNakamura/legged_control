@@ -123,12 +123,12 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
 
   wbcTimer_.startTimer();
   vector_t x;
-  if(measuredRbdState_(5) > 0.15){
-    x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, updatedMode, period.toSec());
-  }
-  else{
-    x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, plannedMode, period.toSec());
-  }
+  // if(measuredRbdState_(5) > 0.15){
+  //   x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, updatedMode, period.toSec());
+  // }
+  // else{
+  x = wbc_->update(optimizedState, optimizedInput, measuredRbdState_, plannedMode, period.toSec());
+  // }
   wbcTimer_.endTimer();
 
   vector_t torque = x.tail(12);
@@ -163,7 +163,7 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   }
 
   for (size_t j = 0; j < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; ++j) {
-    hybridJointHandles_[j].setCommand(posDes(j), velDes(j), 0, 3, torque(j));
+    // hybridJointHandles_[j].setCommand(posDes(j), velDes(j), 0, 3, torque(j));
   }
 
   contact_flag_t contacts;

@@ -93,6 +93,7 @@ class UnitreeHW : public LeggedHW {
   bool contactStatePrev_[4]{};
 
   double contactBias_[4]{};
+  double imuBias_[3]{};
   bool first_contact_force_read;
   ros::Time initTime;
 
