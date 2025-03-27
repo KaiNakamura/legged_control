@@ -47,17 +47,6 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
   sub_ = ros::NodeHandle().subscribe<nav_msgs::Odometry>("/tracking_camera/odom/sample", 10, &KalmanFilterEstimate::callback, this);
 
   map_sub = ros::NodeHandle().subscribe("elevation_mapping/elevation_map", 1, &KalmanFilterEstimate::getMap, this);
-
-  pz1 = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/pz1", 10);
-  rz = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/rz", 10);
-  eyz1 = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/eyz1", 10);
-  yz1 = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/yz1", 10);
-  ymodelz1 = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/ymodelz1", 10);
-  yz2 = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/yz2", 10);
-  ymodelz2 = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/ymodelz2", 10);
-  joints = ros::NodeHandle().advertise<std_msgs::Float64MultiArray>("state_estimation/joints", 10);
-  joint_vels = ros::NodeHandle().advertise<std_msgs::Float64MultiArray>("state_estimation/joint_vels", 10);
-  eh = ros::NodeHandle().advertise<std_msgs::Float64>("state_estimation/eh", 10);
 }
 
 vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration& period) {
@@ -83,22 +72,11 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   qPino.segment<3>(3) = rbdState_.head<3>();  // Only set orientation, let position in origin.
   qPino.tail(actuatedDofNum) = rbdState_.segment(6, actuatedDofNum);
 
-  std_msgs::Float64MultiArray joint_msg;
-  double joint_values[actuatedDofNum];
-  joint_msg.data.resize(actuatedDofNum);
-  std::copy(rbdState_.segment(6, actuatedDofNum).data(), rbdState_.segment(6, actuatedDofNum).data() + actuatedDofNum, joint_msg.data.begin());
-  joints.publish(joint_msg);
-
   vPino.setZero();
   vPino.segment<3>(3) = getEulerAnglesZyxDerivativesFromGlobalAngularVelocity<scalar_t>(
       qPino.segment<3>(3),
       rbdState_.segment<3>(info_.generalizedCoordinatesNum));  // Only set angular velocity, let linear velocity be zero
   vPino.tail(actuatedDofNum) = rbdState_.segment(6 + info_.generalizedCoordinatesNum, actuatedDofNum);
-
-  std_msgs::Float64MultiArray joint_vel_msg;
-  joint_vel_msg.data.resize(actuatedDofNum);
-  std::copy(rbdState_.segment(6 + info_.generalizedCoordinatesNum, actuatedDofNum).data(), rbdState_.segment(6 + info_.generalizedCoordinatesNum, actuatedDofNum).data() + actuatedDofNum, joint_msg.data.begin());
-  joint_vels.publish(joint_vel_msg);
 
   pinocchio::forwardKinematics(model, data, qPino, vPino);
   pinocchio::updateFramePlacements(model, data);
@@ -135,17 +113,6 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
       isContact = !isContact;
     }
 
-    bool isChangeHigh = contactChanged_[i] & contactFlag_[i];
-    bool isChangeLow = contactChanged_[i] & !contactFlag_[i];
-
-    if(!firstContactDetected[i] && isChangeHigh){
-      firstContactDetected[i] = true;
-      swingLegBias[i] = 0-xHat_(8 + 3*i);
-    }
-    else if(firstContactDetected[i] && isChangeHigh){
-      xHat_(8 + 3*i) -= swingLegBias[i];
-    }
-
     scalar_t high_suspect_number(1000000);
     scalar_t low_suspect_number(0.0001);
     q.block(qIndex, qIndex, 3, 3) = (isContact ? 1. : high_suspect_number) * q.block(qIndex, qIndex, 3, 3);
@@ -156,9 +123,6 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     ps_.segment(3 * i, 3)[2] += footRadius_;
     vs_.segment(3 * i, 3) = -eeVel[i];
 
-    if(!isContact){
-      xHat_(8 + 3*i) = xHat_(2) - ps_(2 + 3*i);
-    }
   }
 
   vector3_t g(0, 0, -9.81);
@@ -172,37 +136,13 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   xHat_ = a_ * xHat_ + b_ * accel;
   matrix_t at = a_.transpose();
 
-  std_msgs::Float64 rz_msg;
-  rz_msg.data = xHat_(2);
-  rz.publish(rz_msg);
-
   // P = FPF^T + Q
   matrix_t pm = a_ * p_ * at + q;
   matrix_t cT = c_.transpose(); 
   vector_t yModel = c_ * xHat_;
 
-  // double footHeightAvg = 0;
-  // double yAvg = 0;
-  // int nContact = 0;
-  // for(int i = 0; i < numContacts_; i++){
-  //   if(contactFlag_[i]){
-  //     footHeightAvg += xHat_(8 + 3*i);
-  //     yAvg += y(2 + 3*i);
-  //     nContact++;
-  //   }
-  // }
-  // if(nContact != 0){
-  //   footHeightAvg /= nContact;
-  //   yAvg /= nContact;
-  // }
-
-  // double ehVal = (xHat_(2) - yAvg) - footHeightAvg ;
-
   // y = z - h(x_k|k-1)
   vector_t ey = y - yModel;
-  // for(int i = 0; i < numContacts_; i++){
-  //   ey(2 + 3*i) -= ehVal;
-  // }
 
   // S = HPH^T + R
   matrix_t s = c_ * pm * cT + r;
@@ -231,34 +171,6 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   odom.header.frame_id = "odom";
   odom.child_frame_id = "base";
   publishMsgs(odom);
-
-  std_msgs::Float64 yz1_msg;
-  yz1_msg.data = y(2);
-  yz1.publish(yz1_msg);
-
-  std_msgs::Float64 ymodelz1_msg;
-  ymodelz1_msg.data = yModel(2);
-  ymodelz1.publish(ymodelz1_msg);
-
-  std_msgs::Float64 yz2_msg;
-  yz2_msg.data = y(5);
-  yz2.publish(yz2_msg);
-
-  std_msgs::Float64 ymodelz2_msg;
-  ymodelz2_msg.data = yModel(5);
-  ymodelz2.publish(ymodelz2_msg);
-
-  std_msgs::Float64 eyz1_msg;
-  eyz1_msg.data = ey(2);
-  eyz1.publish(eyz1_msg);
-
-  std_msgs::Float64 pz1_msg;
-  pz1_msg.data = xHat_(8);
-  pz1.publish(pz1_msg);
-
-  // std_msgs::Float64 eh_msg;
-  // eh_msg.data = ehVal;
-  // eh.publish(eh_msg);
 
   return rbdState_;
 }

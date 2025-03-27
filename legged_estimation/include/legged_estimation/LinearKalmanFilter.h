@@ -71,27 +71,8 @@ class KalmanFilterEstimate : public StateEstimateBase {
   grid_map::GridMap map;
   ros::Subscriber map_sub;
 
-  int printCount = 0;
-
-  ros::Publisher yz1;
-  ros::Publisher ymodelz1;
-  ros::Publisher yz2;
-  ros::Publisher ymodelz2;
-  ros::Publisher eyz1;
-  ros::Publisher eh;
-
-  ros::Publisher pz1;
-  ros::Publisher rz;
-  ros::Publisher joints;
-  ros::Publisher joint_vels;
-
-  double footCompression = 0.04;
   ros::Time contactTime[4]{};
-  contact_flag_t prevContactFlag_{};
   double settleTime = 0.00;
-
-  bool firstContactDetected[4] = {false, false, false, false};
-  double swingLegBias[4] = {0.0, 0.0, 0.0, 0.0};
 };
 
 }  // namespace legged
