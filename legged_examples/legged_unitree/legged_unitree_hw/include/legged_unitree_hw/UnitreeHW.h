@@ -110,6 +110,8 @@ class UnitreeHW : public LeggedHW {
   std::vector<int> swap_joint_indices;
   std::vector<int> swap_foot_indices;
 
+  int nReadings = 0;
+
   FaceLightClient light_client_;
 };
 

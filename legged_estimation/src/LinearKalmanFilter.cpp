@@ -47,6 +47,7 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
   sub_ = ros::NodeHandle().subscribe<nav_msgs::Odometry>("/tracking_camera/odom/sample", 10, &KalmanFilterEstimate::callback, this);
 
   map_sub = ros::NodeHandle().subscribe("elevation_mapping/elevation_map", 1, &KalmanFilterEstimate::getMap, this);
+  joints = ros::NodeHandle().advertise<std_msgs::Float64MultiArray>("state_estimation/joints", 10);
 }
 
 vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration& period) {
@@ -71,6 +72,12 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   qPino.setZero();
   qPino.segment<3>(3) = rbdState_.head<3>();  // Only set orientation, let position in origin.
   qPino.tail(actuatedDofNum) = rbdState_.segment(6, actuatedDofNum);
+
+  std_msgs::Float64MultiArray joint_msg;
+  double joint_values[actuatedDofNum];
+  joint_msg.data.resize(actuatedDofNum);
+  std::copy(rbdState_.segment(6, actuatedDofNum).data(), rbdState_.segment(6, actuatedDofNum).data() + actuatedDofNum, joint_msg.data.begin());
+  joints.publish(joint_msg);
 
   vPino.setZero();
   vPino.segment<3>(3) = getEulerAnglesZyxDerivativesFromGlobalAngularVelocity<scalar_t>(

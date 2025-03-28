@@ -73,6 +73,8 @@ class KalmanFilterEstimate : public StateEstimateBase {
 
   ros::Time contactTime[4]{};
   double settleTime = 0.00;
+
+  ros::Publisher joints;
 };
 
 }  // namespace legged

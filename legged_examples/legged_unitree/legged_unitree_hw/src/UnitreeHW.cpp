@@ -100,11 +100,21 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
         contactBias_[i] = lowState_.footForce[i];
         contactState_[i] = 1;
         contactStatePrev_[i] = 1;
+
       }
       for(int i = 0; i < 3; i++){
         imuBias_[i] = lowState_.imu.accelerometer[i];
       }
+      nReadings++;
+
     } else {
+      for(int i = 0; i < 3; i++){
+        imuBias_[i] = lowState_.imu.accelerometer[i] / nReadings;
+      }
+
+      for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
+        contactBias_[i] = lowState_.footForce[i] / nReadings;
+      }
       // for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
         // FR FL RR RL
         // contactState_[i] = (lowState_.footForce[i] - contactBias_[i]) > contactThreshold_;
