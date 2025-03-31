@@ -44,7 +44,7 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
   eeKinematics_->setPinocchioInterface(pinocchioInterface_);
 
   world2odom_.setRotation(tf2::Quaternion::getIdentity());
-  sub_ = ros::NodeHandle().subscribe<nav_msgs::Odometry>("/tracking_camera/odom/sample", 10, &KalmanFilterEstimate::callback, this);
+  sub_ = ros::NodeHandle().subscribe<nav_msgs::Odometry>("/laser_odometry", 10, &KalmanFilterEstimate::callback, this);
 
   map_sub = ros::NodeHandle().subscribe("elevation_mapping/elevation_map", 1, &KalmanFilterEstimate::getMap, this);
   joints = ros::NodeHandle().advertise<std_msgs::Float64MultiArray>("state_estimation/joints", 10);
@@ -183,18 +183,27 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
 }
 
 void KalmanFilterEstimate::updateFromTopic() {
+  // Attempt to read an Odometry message
   auto* msg = buffer_.readFromRT();
+  if (!msg) return;  // No new message available
 
+  //------------------------------------------------------------------------------
+  // 1) Build the world->sensor TF from the Odometry message
+  //------------------------------------------------------------------------------
   tf2::Transform world2sensor;
-  world2sensor.setOrigin(tf2::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z));
-  world2sensor.setRotation(tf2::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z,
+  world2sensor.setOrigin(tf2::Vector3(msg->pose.pose.position.x,
+                                      msg->pose.pose.position.y,
+                                      msg->pose.pose.position.z));
+  world2sensor.setRotation(tf2::Quaternion(msg->pose.pose.orientation.x,
+                                           msg->pose.pose.orientation.y,
+                                           msg->pose.pose.orientation.z,
                                            msg->pose.pose.orientation.w));
 
-  if (world2odom_.getRotation() == tf2::Quaternion::getIdentity())  // First received
-  {
+  // If this is our first callback and we haven't computed world2odom_ yet:
+  if (world2odom_.getRotation() == tf2::Quaternion::getIdentity()) {
     tf2::Transform odom2sensor;
     try {
-      geometry_msgs::TransformStamped tf_msg = tfBuffer_.lookupTransform("odom", msg->child_frame_id, msg->header.stamp);
+      geometry_msgs::TransformStamped tf_msg = tfBuffer_.lookupTransform("odom", "lidar_imu_frame", ros::Time(0));
       tf2::fromMsg(tf_msg.transform, odom2sensor);
     } catch (tf2::TransformException& ex) {
       ROS_WARN("%s", ex.what());
@@ -202,40 +211,131 @@ void KalmanFilterEstimate::updateFromTopic() {
     }
     world2odom_ = world2sensor * odom2sensor.inverse();
   }
+
+  //------------------------------------------------------------------------------
+  // 2) We get odom->base by combining transforms
+  //    This is effectively the measured base pose in the "odom" frame.
+  //------------------------------------------------------------------------------
   tf2::Transform base2sensor;
   try {
-    geometry_msgs::TransformStamped tf_msg = tfBuffer_.lookupTransform("base", msg->child_frame_id, msg->header.stamp);
+    // This is the frame from the URDF, not the one that fast-lio is publishing.
+    geometry_msgs::TransformStamped tf_msg = tfBuffer_.lookupTransform("base", "lidar_imu_frame", ros::Time(0));
     tf2::fromMsg(tf_msg.transform, base2sensor);
   } catch (tf2::TransformException& ex) {
     ROS_WARN("%s", ex.what());
     return;
   }
   tf2::Transform odom2base = world2odom_.inverse() * world2sensor * base2sensor.inverse();
-  vector3_t newPos(odom2base.getOrigin().x(), odom2base.getOrigin().y(), odom2base.getOrigin().z());
 
-  const auto& model = pinocchioInterface_.getModel();
-  auto& data = pinocchioInterface_.getData();
+  //------------------------------------------------------------------------------
+  // 3) POSITION UPDATE (same idea as before)
+  //    We'll treat (x, y, z) from odometry as a measurement for the first 3 entries of xHat_.
+  //------------------------------------------------------------------------------
+  // Extract measured base position in 'odom' frame
+  Eigen::Vector3d posOdom(odom2base.getOrigin().x(),
+                          odom2base.getOrigin().y(),
+                          odom2base.getOrigin().z());
 
-  vector_t qPino(info_.generalizedCoordinatesNum);
-  qPino.head<3>() = newPos;
-  qPino.segment<3>(3) = rbdState_.head<3>();
-  qPino.tail(info_.actuatedDofNum) = rbdState_.segment(6, info_.actuatedDofNum);
-  pinocchio::forwardKinematics(model, data, qPino);
-  pinocchio::updateFramePlacements(model, data);
+  // The measurement model H only updates the position portion of xHat_.
+  //  xHat_ = [ px, py, pz, vx, vy, vz, footPositions(12) ]
+  // So:
+  Eigen::Matrix<double, 3, 18> H;
+  H.setZero();
+  H.block<3,3>(0,0) = Eigen::Matrix3d::Identity();
 
-  xHat_.segment<3>(0) = newPos;
-  for (size_t i = 0; i < numContacts_; ++i) {
-    xHat_.segment<3>(6 + i * 3) = eeKinematics_->getPosition(vector_t())[i];
-    xHat_(6 + i * 3 + 2) -= footRadius_;
-    if (contactFlag_[i]) {
-      feetHeights_[i] = xHat_(6 + i * 3 + 2);
-    }
+  // Covariance of the odometry position. 
+  // We'll read it from the top-left 3x3 of msg->pose.covariance:
+  // The row-major indexing for a 6x6 is [i*6 + j], i=0..5, j=0..5
+  // where i=0..2, j=0..2 covers position. 
+  Eigen::Matrix3d Rpos;
+  Rpos << msg->pose.covariance[0], msg->pose.covariance[1], msg->pose.covariance[2],
+          msg->pose.covariance[6], msg->pose.covariance[7], msg->pose.covariance[8],
+          msg->pose.covariance[12],msg->pose.covariance[13],msg->pose.covariance[14];
+
+  // Fast-LIO has higher covariance, so let's make Rpos a bit bigger
+  // Innovation (residual)
+  Eigen::Vector3d y = posOdom - H * xHat_;
+
+  // Kalman gain
+  Eigen::Matrix3d S = H * p_ * H.transpose() + Rpos;
+  Eigen::Matrix<double, 18, 3> K = p_ * H.transpose() * S.inverse();
+
+  // Correction
+  xHat_ += K * y;
+  p_ = (Eigen::Matrix<double, 18, 18>::Identity() - K * H) * p_;
+
+  // Force p_ to remain symmetric
+  p_ = 0.5 * (p_ + p_.transpose());
+
+  //------------------------------------------------------------------------------
+  // 4) ORIENTATION UPDATE
+  //
+  // Because our filter state 'xHat_' does NOT store orientation, we do
+  // a *separate* small-angle (or Euler) correction for the quaternion 'quat_'.
+  // We'll treat 'quat_' as a 3D state in Euler angles (or small rotation vector)
+  // and do a standard linear update with the odometry's orientation as a measurement.
+  //------------------------------------------------------------------------------
+
+  // (a) Convert the filter's orientation (IMU-based) to Euler angles
+  //     Let's assume ZYX order or whichever you typically use:
+  Eigen::Vector3d eulFilter = quatToZyx(quat_);  // You may have a utility for this
+
+  // (b) Convert odometry orientation to Euler
+  tf2::Quaternion qOdom(odom2base.getRotation());
+  // Make sure it is normalized:
+  if (fabs(qOdom.length() - 1.0) > 1e-6) {
+    qOdom.normalize();
   }
+  // Convert to ZYX euler
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(qOdom).getRPY(roll, pitch, yaw);
+  Eigen::Vector3d eulOdom(yaw, pitch, roll);  // Be consistent with your ZYX usage!
 
-  auto odom = getOdomMsg();
+  // (c) Orientation covariance from the bottom-right 3x3 of the 6x6 pose covariance
+  // i=3..5, j=3..5 => row-major indices [ (3)*6+3, (3)*6+4, ... etc. ] 
+  // That is [21, 22, 23, 27, 28, 29, 33, 34, 35].
+  // We'll store it in Rori:
+  Eigen::Matrix3d Rori;
+  Rori << msg->pose.covariance[21], msg->pose.covariance[22], msg->pose.covariance[23],
+          msg->pose.covariance[27], msg->pose.covariance[28], msg->pose.covariance[29],
+          msg->pose.covariance[33], msg->pose.covariance[34], msg->pose.covariance[35];
+
+  // (d) We keep orientationCovariance_ as a 3x3 capturing our filter's uncertainty
+  // about orientation. The measurement model here is simply identity: eul_meas = eul_filter
+  Eigen::Matrix3d Hori = Eigen::Matrix3d::Identity();
+
+  // (e) Innovation
+  // We want eulOdom - eulFilter, but remember angles can wrap, so you might want
+  // to do a small wrap-around step. For simplicity, just do a naive difference here:
+  Eigen::Vector3d yori = eulOdom - eulFilter;
+  // Optionally wrap each component into [-pi, pi], if you expect big differences.
+
+  // (f) Kalman gain for orientation
+  Eigen::Matrix3d Sori = Hori * orientationCovariance_ * Hori.transpose() + Rori;
+  Eigen::Matrix3d Kori = orientationCovariance_ * Hori.transpose() * Sori.inverse();
+
+  // (g) Correct the Euler angles
+  eulFilter += Kori * yori;
+
+  // (h) Update orientation covariance
+  orientationCovariance_ = (Eigen::Matrix3d::Identity() - Kori * Hori) * orientationCovariance_;
+  orientationCovariance_ = 0.5 * (orientationCovariance_ + orientationCovariance_.transpose());
+
+  // (i) Convert corrected Euler angles back to the quaternion
+  //     E.g., something like:
+  quat_ = zyxToQuat(eulFilter);  // or your favorite internal function
+
+  //------------------------------------------------------------------------------
+  // 5) Done with position+orientation measurement updates.
+  //    Now we can publish an updated Odometry (for debugging or further usage).
+  //------------------------------------------------------------------------------
+  auto odom = getOdomMsg();  // This uses xHat_ + quat_
   odom.header = msg->header;
   odom.child_frame_id = "base";
   publishMsgs(odom);
+
+  // Mark that we handled an update
+  topicUpdated_ = false;
 }
 
 void KalmanFilterEstimate::callback(const nav_msgs::Odometry::ConstPtr& msg) {

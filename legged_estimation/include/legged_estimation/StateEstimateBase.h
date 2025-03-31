@@ -85,4 +85,22 @@ Eigen::Matrix<SCALAR_T, 3, 1> quatToZyx(const Eigen::Quaternion<SCALAR_T>& q) {
   return zyx;
 }
 
+template <typename SCALAR_T>
+Eigen::Quaternion<SCALAR_T> zyxToQuat(const Eigen::Matrix<SCALAR_T, 3, 1>& zyx) {
+  SCALAR_T cy = std::cos(zyx(0) * SCALAR_T(0.5));  // Yaw cosine
+  SCALAR_T sy = std::sin(zyx(0) * SCALAR_T(0.5));  // Yaw sine
+  SCALAR_T cp = std::cos(zyx(1) * SCALAR_T(0.5));  // Pitch cosine
+  SCALAR_T sp = std::sin(zyx(1) * SCALAR_T(0.5));  // Pitch sine
+  SCALAR_T cr = std::cos(zyx(2) * SCALAR_T(0.5));  // Roll cosine
+  SCALAR_T sr = std::sin(zyx(2) * SCALAR_T(0.5));  // Roll sine
+
+  Eigen::Quaternion<SCALAR_T> q;
+  q.w() = cr * cp * cy + sr * sp * sy;
+  q.x() = sr * cp * cy - cr * sp * sy;
+  q.y() = cr * sp * cy + sr * cp * sy;
+  q.z() = cr * cp * sy - sr * sp * cy;
+
+  return q.normalized();  // Ensure it's a unit quaternion
+}
+
 }  // namespace legged
