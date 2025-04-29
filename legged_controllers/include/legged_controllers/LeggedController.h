@@ -67,7 +67,10 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   std_msgs::Int16 leg4_contact_sensor;
 
   std_msgs::Int16 leg1_force_sensor;
-  
+  std_msgs::Int16 leg2_force_sensor;
+  std_msgs::Int16 leg3_force_sensor;
+  std_msgs::Int16 leg4_force_sensor;
+
   std_msgs::Float64 height;
 
   // State Estimation
@@ -77,6 +80,7 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   std::shared_ptr<ContactEstimate> contactEstimate_;
   std::shared_ptr<CentroidalModelRbdConversions> rbdConversions_;
   contact_flag_t contactFlag;
+  vector_t sensorForces;
 
   // Whole Body Control
   std::shared_ptr<WbcBase> wbc_;

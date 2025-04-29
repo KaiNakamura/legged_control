@@ -19,6 +19,8 @@
 #include <vector>
 #include "FaceLightClient.h"
 #include "std_msgs/Bool.h"
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/PoseStamped.h>
 
 #define NUM_DOF 12
 #define NUM_LEG 4
@@ -73,6 +75,8 @@ class UnitreeHW : public LeggedHW {
    */
   void write(const ros::Time& time, const ros::Duration& period) override;
 
+  void updateJoystick(const ros::Time& time);
+
  private:
   bool setupJoints();
 
@@ -93,9 +97,15 @@ class UnitreeHW : public LeggedHW {
   bool contactStatePrev_[4]{};
 
   double contactBias_[4]{};
+  double contactForce_[4]{};
   double imuBias_[3]{};
+  double gyroBias_[3]{};
   bool first_contact_force_read;
   ros::Time initTime;
+  ros::Time lastJoyUpdate_ = ros::Time(0.1);
+  ros::Time lastCmdVelPub_ = ros::Time(0.1);
+
+  double cmdVelPublishTime = 0.2;
 
   int powerLimit_{};
   int contactThreshold_{};
@@ -113,6 +123,16 @@ class UnitreeHW : public LeggedHW {
   int nReadings = 0;
 
   FaceLightClient light_client_;
+
+  ros::Publisher joyPublisher_;
+  ros::Publisher cmdVelPublisher_;
+  ros::Publisher goalPublisher_;
+
+  bool controllerEnabled = true;
+
+  double significantJoystickChange = 0.05;
+
+  std::string gaitFile;
 };
 
 }  // namespace legged

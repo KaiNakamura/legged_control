@@ -10,6 +10,9 @@
 #include <ocs2_robotic_tools/common/RotationDerivativesTransforms.h>
 #include <ocs2_robotic_tools/common/RotationTransforms.h>
 
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2_ros/transform_broadcaster.h>
+
 namespace legged {
 // 
 KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface, CentroidalModelInfo info,
@@ -22,6 +25,9 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
       tfListener_(tfBuffer_),
       topicUpdated_(false) {
   xHat_.setZero(numState_);
+  xHatIMU.setZero(numState_);
+  xHatFeet.setZero(numState_);
+
   ps_.setZero(dimContacts_);
   vs_.setZero(dimContacts_);
   a_.setIdentity(numState_, numState_);
@@ -130,6 +136,9 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     ps_.segment(3 * i, 3)[2] += footRadius_;
     vs_.segment(3 * i, 3) = -eeVel[i];
 
+    // if(map.exists("elevation") && isContact){
+    //   xHat_(numState_ + 2 + 3*i) = map.atPosition("elevation", xHat_.segment(numState_ + 3*i, 2)) + footRadius_;
+    // }
   }
 
   vector3_t g(0, 0, -9.81);
@@ -141,6 +150,27 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
 
   // x_k|k-1 = f(x_k-1|k-1, u _k-1)
   xHat_ = a_ * xHat_ + b_ * accel;
+  xHatIMU = a_ * xHatIMU + b_ * accel;
+
+  tf2_ros::TransformBroadcaster broadcaster;
+  geometry_msgs::TransformStamped IMU_frame;
+  
+  IMU_frame.header.stamp = ros::Time::now();  // Set the timestamp
+  IMU_frame.header.frame_id = "odom";    // Parent frame
+  IMU_frame.child_frame_id = "IMU_frame";   // Child frame
+
+  // Set the translation (x, y, z)
+  IMU_frame.transform.translation.x = xHatIMU(0);
+  IMU_frame.transform.translation.y = xHatIMU(1);
+  IMU_frame.transform.translation.z = xHatIMU(2);
+
+  // Set the rotation as a quaternion (x, y, z, w)
+  IMU_frame.transform.rotation.x = quat_.x();
+  IMU_frame.transform.rotation.y = quat_.y();
+  IMU_frame.transform.rotation.z = quat_.z();
+  IMU_frame.transform.rotation.w = quat_.w();
+  broadcaster.sendTransform(IMU_frame);
+
   matrix_t at = a_.transpose();
 
   // P = FPF^T + Q
@@ -150,6 +180,36 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
 
   // y = z - h(x_k|k-1)
   vector_t ey = y - yModel;
+
+  geometry_msgs::TransformStamped feet_frame;
+  
+  feet_frame.header.stamp = ros::Time::now();  // Set the timestamp
+  feet_frame.header.frame_id = "odom";    // Parent frame
+  feet_frame.child_frame_id = "feet_frame";   // Child frame
+
+  int nContacts = 0;
+  vector_t eFeet = (y - c_*xHatFeet);
+  vector_t eSum(2*dimContacts_);
+  eSum.setZero();
+  for(int i = 0; i < 4; i++){
+    if(contactFlag_[i]){
+      eSum += eFeet.segment(3*i, 3);
+      nContacts+=1;
+    }
+  }
+  xHatFeet.segment(3, 3) += eSum / nContacts;
+
+  // Set the translation (x, y, z)
+  feet_frame.transform.translation.x = xHatFeet(0);
+  feet_frame.transform.translation.y = xHatFeet(1);
+  feet_frame.transform.translation.z = xHatFeet(2);
+
+  // Set the rotation as a quaternion (x, y, z, w)
+  feet_frame.transform.rotation.x = quat_.x();
+  feet_frame.transform.rotation.y = quat_.y();
+  feet_frame.transform.rotation.z = quat_.z();
+  feet_frame.transform.rotation.w = quat_.w();
+  broadcaster.sendTransform(feet_frame);
 
   // S = HPH^T + R
   matrix_t s = c_ * pm * cT + r;
@@ -187,6 +247,9 @@ void KalmanFilterEstimate::updateFromTopic() {
   auto* msg = buffer_.readFromRT();
   if (!msg) return;  // No new message available
 
+  ros::Time currentTime = ros::Time::now();
+  ros::Duration delay = currentTime - msg->header.stamp;
+  ROS_WARN_STREAM("Odometry message delay: " << delay.toSec() << " seconds.");
   //------------------------------------------------------------------------------
   // 1) Build the world->sensor TF from the Odometry message
   //------------------------------------------------------------------------------
@@ -227,14 +290,41 @@ void KalmanFilterEstimate::updateFromTopic() {
   }
   tf2::Transform odom2base = world2odom_.inverse() * world2sensor * base2sensor.inverse();
 
+  tf2_ros::TransformBroadcaster broadcaster;
+  geometry_msgs::TransformStamped lidar_SLAM;
+  
+  lidar_SLAM.header.stamp = ros::Time::now();  // Set the timestamp
+  lidar_SLAM.header.frame_id = "odom";    // Parent frame
+  lidar_SLAM.child_frame_id = "lidar_SLAM";   // Child frame
+
+  // Set the translation (x, y, z)
+  lidar_SLAM.transform.translation.x = odom2base.getOrigin().x() + slamXOffset;
+  lidar_SLAM.transform.translation.y = odom2base.getOrigin().y() + slamYOffset;
+  lidar_SLAM.transform.translation.z = odom2base.getOrigin().z() + slamZOffset;
+
+  // Set the rotation as a quaternion (x, y, z, w)
+  lidar_SLAM.transform.rotation.x = odom2base.getRotation().x();
+  lidar_SLAM.transform.rotation.y = odom2base.getRotation().y();
+  lidar_SLAM.transform.rotation.z = odom2base.getRotation().z();
+  lidar_SLAM.transform.rotation.w = odom2base.getRotation().w();
+  broadcaster.sendTransform(lidar_SLAM);
+
   //------------------------------------------------------------------------------
   // 3) POSITION UPDATE (same idea as before)
   //    We'll treat (x, y, z) from odometry as a measurement for the first 3 entries of xHat_.
   //------------------------------------------------------------------------------
   // Extract measured base position in 'odom' frame
-  Eigen::Vector3d posOdom(odom2base.getOrigin().x(),
-                          odom2base.getOrigin().y(),
-                          odom2base.getOrigin().z());
+  Eigen::Vector3d posOdom(odom2base.getOrigin().x() + slamXOffset,
+                          odom2base.getOrigin().y() + slamYOffset,
+                          odom2base.getOrigin().z() + slamZOffset);
+
+  // if(!firstSlamUpdate){
+  //   firstSlamUpdate = true;
+
+  //   slamXOffset = xHat_(0) - posOdom(0);
+  //   slamYOffset = xHat_(1) - posOdom(1);
+  //   slamZOffset = xHat_(2) - posOdom(2) + footRadius_;
+  // }
 
   // The measurement model H only updates the position portion of xHat_.
   //  xHat_ = [ px, py, pz, vx, vy, vz, footPositions(12) ]
@@ -248,11 +338,11 @@ void KalmanFilterEstimate::updateFromTopic() {
   // The row-major indexing for a 6x6 is [i*6 + j], i=0..5, j=0..5
   // where i=0..2, j=0..2 covers position. 
   Eigen::Matrix3d Rpos;
-  Rpos << msg->pose.covariance[0], msg->pose.covariance[1], msg->pose.covariance[2],
-          msg->pose.covariance[6], msg->pose.covariance[7], msg->pose.covariance[8],
-          msg->pose.covariance[12],msg->pose.covariance[13],msg->pose.covariance[14];
+  Rpos << slamSensorNoise, msg->pose.covariance[1], msg->pose.covariance[2],
+          msg->pose.covariance[6], slamSensorNoise, msg->pose.covariance[8],
+          msg->pose.covariance[12],msg->pose.covariance[13], slamSensorNoise;
 
-  // Fast-LIO has higher covariance, so let's make Rpos a bit bigger
+  // Fast-LIO has higher covariance, so let's make Rpos a bit bigger JK
   // Innovation (residual)
   Eigen::Vector3d y = posOdom - H * xHat_;
 
@@ -262,6 +352,13 @@ void KalmanFilterEstimate::updateFromTopic() {
 
   // Correction
   xHat_ += K * y;
+
+  y = posOdom - H*xHatIMU;
+  xHatIMU += K * y;
+
+  y = posOdom - H*xHatFeet;
+  xHatFeet += K * y;
+
   p_ = (Eigen::Matrix<double, 18, 18>::Identity() - K * H) * p_;
 
   // Force p_ to remain symmetric
@@ -352,7 +449,6 @@ nav_msgs::Odometry KalmanFilterEstimate::getOdomMsg() {
   odom.pose.pose.orientation.y = quat_.y();
   odom.pose.pose.orientation.z = quat_.z();
   odom.pose.pose.orientation.w = quat_.w();
-  odom.pose.pose.orientation.x = quat_.x();
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
       odom.pose.covariance[i * 6 + j] = p_(i, j);

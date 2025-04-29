@@ -37,7 +37,7 @@ class ContactEstimate{
  public:
   ContactEstimate(PinocchioInterface pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics);
 
-  size_t update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contact_flag, ModeSchedule modeSchedule_);
+  size_t update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, vector_t sensorForces, ModeSchedule modeSchedule_);
 
   void loadSettings(const std::string& taskFile, bool verbose);
 
@@ -87,7 +87,7 @@ class ContactEstimate{
   double foot_offset = 0.02;
   double mean_zg[4] = {foot_offset, foot_offset, foot_offset, foot_offset};
 
-  double joint_variance = 0.05;
+  double joint_variance = 0.01;
   double variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
   double force_sensor_readings[4] = {-1, -1, -1, -1};
@@ -114,7 +114,7 @@ class ContactEstimate{
 
   double kalman_variance_time = 1;
   double kalman_variance_height[4] = {0.6, 0.6, 0.6, 0.6};
-  double kalman_variance_force = 0.8;
+  double kalman_variance_force = 0.5;
   double kalman_variance_force_sensors = 5;
 
   bool contact_time_diff[4] = {false, false, false, false};
@@ -129,8 +129,12 @@ class ContactEstimate{
   ros::Publisher leg3_contact_prob_pub;
   ros::Publisher leg4_contact_prob_pub;
 
-  ros::Publisher leg1_force_pub;
+  ros::Publisher leg1_force_sensor_pub;
+  ros::Publisher leg2_force_sensor_pub;
+  ros::Publisher leg3_force_sensor_pub;
+  ros::Publisher leg4_force_sensor_pub;
 
+  ros::Publisher leg1_force_pub;
   ros::Publisher leg2_force_pub;
   ros::Publisher leg3_force_pub;
   ros::Publisher leg4_force_pub;
@@ -167,6 +171,11 @@ class ContactEstimate{
   std_msgs::Float64 leg2_force;
   std_msgs::Float64 leg3_force;
   std_msgs::Float64 leg4_force;
+
+  std_msgs::Float64 leg1_force_sensor;
+  std_msgs::Float64 leg2_force_sensor;
+  std_msgs::Float64 leg3_force_sensor;
+  std_msgs::Float64 leg4_force_sensor;
 
   ros::Subscriber joint_state_sub;
   ros::Subscriber map_sub;

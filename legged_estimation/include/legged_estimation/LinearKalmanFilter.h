@@ -41,12 +41,20 @@ class KalmanFilterEstimate : public StateEstimateBase {
 
   // Config
   scalar_t footRadius_ = 0.02;
-  scalar_t imuProcessNoisePosition_ = 0.02;
-  scalar_t imuProcessNoiseVelocity_ = 0.02;
+  scalar_t imuProcessNoisePosition_ = 0.01;
+  scalar_t imuProcessNoiseVelocity_ = 0.01;
   scalar_t footProcessNoisePosition_ = 0.002;
   scalar_t footSensorNoisePosition_ = 0.005;
   scalar_t footSensorNoiseVelocity_ = 0.1;
   scalar_t footHeightSensorNoise_ = 0.01;
+
+  double slamXOffset = 0.00;
+  double slamYOffset = 0.00;
+  double slamZOffset = 0.00;
+
+  double slamSensorNoise = 0.001;
+
+  bool firstSlamUpdate = false;
 
  private:
   size_t numContacts_, dimContacts_, numState_, numObserve_;
@@ -58,6 +66,8 @@ class KalmanFilterEstimate : public StateEstimateBase {
   // Xhat now = {r_3x3;v_3x3; q_4x3, ps_12x3}
   // q is the quaternion
   vector_t xHat_, ps_, vs_;
+
+  vector_t xHatIMU, xHatFeet;
 
   // Topic
   ros::Subscriber sub_;
@@ -72,7 +82,7 @@ class KalmanFilterEstimate : public StateEstimateBase {
   ros::Subscriber map_sub;
 
   ros::Time contactTime[4]{};
-  double settleTime = 0.00;
+  double settleTime = 0.01;
 
   ros::Publisher joints;
 };

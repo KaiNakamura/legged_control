@@ -72,6 +72,7 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
 
   // Safety Checker
   safetyChecker_ = std::make_shared<SafetyChecker>(leggedInterface_->getCentroidalModelInfo());
+  sensorForces = vector_t(4);
 
   return true;
 }
@@ -95,6 +96,10 @@ void LeggedController::starting(const ros::Time& time) {
     ros::WallRate(leggedInterface_->mpcSettings().mrtDesiredFrequency_).sleep();
   }
   ROS_INFO_STREAM("Initial policy has been received.");
+
+  for (size_t j = 0; j < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; ++j) {
+    hybridJointHandles_[j].setCommand(0, 0, 0, 0, 0);
+  }
 
   mpcRunning_ = true;
 }
@@ -131,8 +136,12 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   // }
   wbcTimer_.endTimer();
 
-  vector_t torque = x.tail(12);
-  updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, contactFlag, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
+  vector_t torque = x.tail(leggedInterface_->getCentroidalModelInfo().actuatedDofNum);
+  // vector_t torqueObs = x.tail(leggedInterface_->getCentroidalModelInfo().actuatedDofNum);
+  // for(int i = 0; i < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; i++){
+  //   torqueObs(i) = hybridJointHandles_[i].getFeedforward();
+  // }
+  updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, sensorForces, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
   // std::cout << measuredRbdState_(5) << std::endl;
 
   leg1_contact_sensor.data = contactFlag[0];
@@ -192,6 +201,7 @@ void LeggedController::updateStateEstimation(const ros::Time& time, const ros::D
   }
   for (size_t i = 0; i < contacts.size(); ++i) {
     contactFlag[i] = contactHandles_[i].isContact();
+    sensorForces(i) = contactHandles_[i].getForce();
   }
   for (size_t i = 0; i < 4; ++i) {
     quat.coeffs()(i) = imuSensorHandle_.getOrientation()[i];

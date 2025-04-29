@@ -69,11 +69,16 @@ ContactEstimate::ContactEstimate(PinocchioInterface pinocchioInterface, Centroid
   leg3_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg3_force", 10);
   leg4_force_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_force", 10);
 
-  joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 1, &ContactEstimate::getForceReadings, this);
+  leg1_force_sensor_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg1_force_sensor", 10);
+  leg2_force_sensor_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg2_force_sensor", 10);
+  leg3_force_sensor_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg3_force_sensor", 10);
+  leg4_force_sensor_pub = nh.advertise<std_msgs::Float64>("contact_estimation/leg4_force_sensor", 10);
+
+  // joint_state_sub = nh.subscribe("/unitree_hardware/joint_foot", 1, &ContactEstimate::getForceReadings, this);
   map_sub = nh.subscribe("elevation_mapping/elevation_map", 1, &ContactEstimate::getMap, this);
 }
 
-size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, contact_flag_t contactFlag, ModeSchedule modeSchedule_) {
+size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, vector_t sensorForces, ModeSchedule modeSchedule_) {
   // ModeSchedule modeSchedule_ = gaitSchedule.getModeSchedule();
   scalar_t dt = period.toSec();
   // std::cout << dt << std::endl;
@@ -251,7 +256,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
 
   Eigen::MatrixXd contact_probability_force_sensors = Eigen::MatrixXd(info_.numThreeDofContacts, 1);
   for(int i = 0; i < info_.numThreeDofContacts; i++){
-    contact_probability_force_sensors(i) = calculateContactProbabilityForceSensor(force_sensor_readings[i]);
+    contact_probability_force_sensors(i) = calculateContactProbabilityForceSensor(sensorForces(i));
   }
   // std::cout << "contact probability force sensors: " << std::endl << contact_probability_force_sensors.transpose() << std::endl;
 
@@ -347,6 +352,11 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg3_force.data = force_estimated(8);
   leg4_force.data = force_estimated(11);
 
+  leg1_force_sensor.data = sensorForces(0);
+  leg2_force_sensor.data = sensorForces(1);
+  leg3_force_sensor.data = sensorForces(2);
+  leg4_force_sensor.data = sensorForces(3);
+
   leg1_height.data = footPos[0][2];
   leg1_foothold.data = mean_zg[0] - foot_offset;
   leg1_variance.data = variance_zg[0];
@@ -372,6 +382,11 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
   leg3_force_pub.publish(leg3_force);
   leg4_force_pub.publish(leg4_force);
 
+  leg1_force_sensor_pub.publish(leg1_force_sensor);
+  leg2_force_sensor_pub.publish(leg2_force_sensor);
+  leg3_force_sensor_pub.publish(leg3_force_sensor);
+  leg4_force_sensor_pub.publish(leg4_force_sensor);
+
   leg1_height_pub.publish(leg1_height);
   leg1_variance_pub.publish(leg1_variance);
   leg1_foothold_pub.publish(leg1_foothold);
@@ -396,13 +411,13 @@ double ContactEstimate::calculateContactProbabilityForceSensor(double foot_force
   return 0.5 * (1 + erf((foot_force - mean_force_sensor)/(variance_force_sensor*sqrt(2))));
 }
 
-void ContactEstimate::getForceReadings(const sensor_msgs::JointState msg){
-  // Note again replace 4 with numlegs and 12 with numdof
-  for(int i = 0; i < info_.numThreeDofContacts; i++){
-    force_sensor_readings[i] = msg.effort[12 + i];
-  }
-  force_sensor_read = true;
-}
+// void ContactEstimate::getForceReadings(const sensor_msgs::JointState msg){
+//   // Note again replace 4 with numlegs and 12 with numdof
+//   for(int i = 0; i < info_.numThreeDofContacts; i++){
+//     force_sensor_readings[i] = msg.effort[12 + i];
+//   }
+//   force_sensor_read = true;
+// }
 
 void ContactEstimate::getMap(const grid_map_msgs::GridMap& msg){
   grid_map::GridMapRosConverter::fromMessage(msg, map);

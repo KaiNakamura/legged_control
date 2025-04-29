@@ -12,6 +12,8 @@
 #endif
 
 #include <sensor_msgs/Joy.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace legged {
 bool UnitreeHW::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh) {
@@ -51,7 +53,9 @@ bool UnitreeHW::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh) {
     return false;
   }
 
-  // joyPublisher_ = root_nh.advertise<sensor_msgs::Joy>("/joy", 10);
+  joyPublisher_ = root_nh.advertise<sensor_msgs::Joy>("/joy", 10);
+  cmdVelPublisher_ = root_nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
+  goalPublisher_ = root_nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 10);
 
   imu_pub = robot_hw_nh.advertise<sensor_msgs::Imu>("/unitree_hardware/imu", 100);
   joint_foot_pub = robot_hw_nh.advertise<sensor_msgs::JointState>("/unitree_hardware/joint_foot", 100);
@@ -62,12 +66,50 @@ bool UnitreeHW::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh) {
   // to record contact bias
   first_contact_force_read = false;
 
+  // gaitFile = root_nh.getParam("/gaitCommandFile", gaitCommandFile);
+
   return true;
 }
 
 void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*period*/) {
   udp_->Recv();
   udp_->GetRecv(lowState_);
+
+  // a temporary logic for Go1, may not work well if the robot stands up
+  // initially. record the first contact force reading as contact force bias
+  if (first_contact_force_read == false) {
+    initTime = currTime;
+    first_contact_force_read = true;
+  } else {
+    ros::Duration elapsedTime = (currTime - initTime);
+    double timeSinceStart = elapsedTime.toSec();
+
+    if (timeSinceStart < 3) {
+      for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
+        contactBias_[i] += lowState_.footForce[i];
+        contactState_[i] = 1; 
+        contactStatePrev_[i] = 1;
+      }
+      for(int i = 0; i < 2; i++){
+        imuBias_[i] += lowState_.imu.accelerometer[i];
+      }
+      imuBias_[2] += (lowState_.imu.accelerometer[2] - 9.81);
+      
+      for(int i = 0; i < 3; i++){
+        gyroBias_[i] += lowState_.imu.gyroscope[i];
+      }
+      nReadings++;
+
+    } else {
+      // for(int i = 0; i < 3; i++){
+      //   imuBias_[i] = lowState_.imu.accelerometer[i];
+      // }
+      // for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
+        // FR FL RR RL
+        // contactState_[i] = (lowState_.footForce[i] - contactBias_[i]) > contactThreshold_;
+      // }
+    }
+  }
 
   for (int i = 0; i < 12; ++i) {
     jointData_[i].pos_ = lowState_.motorState[i].q;
@@ -79,49 +121,13 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
   imuData_.ori_[1] = lowState_.imu.quaternion[2];
   imuData_.ori_[2] = lowState_.imu.quaternion[3];
   imuData_.ori_[3] = lowState_.imu.quaternion[0];
-  imuData_.angularVel_[0] = lowState_.imu.gyroscope[0];
-  imuData_.angularVel_[1] = lowState_.imu.gyroscope[1];
-  imuData_.angularVel_[2] = lowState_.imu.gyroscope[2];
-  imuData_.linearAcc_[0] = lowState_.imu.accelerometer[0];
-  imuData_.linearAcc_[1] = lowState_.imu.accelerometer[1];
-  imuData_.linearAcc_[2] = lowState_.imu.accelerometer[2];
-
-  // a temporary logic for Go1, may not work well if the robot stands up
-  // initially. record the first contact force reading as contact force bias
-  if (first_contact_force_read == false) {
-    initTime = currTime;
-    first_contact_force_read = true;
-  } else {
-    ros::Duration elapsedTime = (currTime - initTime);
-    double timeSinceStart = elapsedTime.toSec();
-
-    if (timeSinceStart < 0.5) {
-      for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
-        contactBias_[i] = lowState_.footForce[i];
-        contactState_[i] = 1;
-        contactStatePrev_[i] = 1;
-
-      }
-      for(int i = 0; i < 3; i++){
-        imuBias_[i] = lowState_.imu.accelerometer[i];
-      }
-      nReadings++;
-
-    } else {
-      for(int i = 0; i < 3; i++){
-        imuBias_[i] = lowState_.imu.accelerometer[i] / nReadings;
-      }
-
-      for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
-        contactBias_[i] = lowState_.footForce[i] / nReadings;
-      }
-      // for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
-        // FR FL RR RL
-        // contactState_[i] = (lowState_.footForce[i] - contactBias_[i]) > contactThreshold_;
-      // }
-    }
-  }
-
+  imuData_.angularVel_[0] = lowState_.imu.gyroscope[0] - gyroBias_[0] / nReadings;
+  imuData_.angularVel_[1] = lowState_.imu.gyroscope[1] - gyroBias_[1] / nReadings;
+  imuData_.angularVel_[2] = lowState_.imu.gyroscope[2] - gyroBias_[2] / nReadings;
+  imuData_.linearAcc_[0] = lowState_.imu.accelerometer[0] - imuBias_[0] / nReadings;
+  imuData_.linearAcc_[1] = lowState_.imu.accelerometer[1] - imuBias_[1] / nReadings;
+  imuData_.linearAcc_[2] = lowState_.imu.accelerometer[2] - imuBias_[2] / nReadings;
+  
   // Set feedforward and velocity cmd to zero to avoid for safety when not
   // controller setCommand
   std::vector<std::string> names = hybridJointInterface_.getNames();
@@ -136,13 +142,13 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
   ros::Time now = ros::Time::now();
   imu_msg.header.stamp = now;
 
-  imu_msg.linear_acceleration.x = lowState_.imu.accelerometer[0] - imuBias_[0];
-  imu_msg.linear_acceleration.y = lowState_.imu.accelerometer[1] - imuBias_[1];
-  imu_msg.linear_acceleration.z = lowState_.imu.accelerometer[2] - imuBias_[2];
+  imu_msg.linear_acceleration.x = imuData_.linearAcc_[0];
+  imu_msg.linear_acceleration.y = imuData_.linearAcc_[1];
+  imu_msg.linear_acceleration.z = imuData_.linearAcc_[2];
 
-  imu_msg.angular_velocity.x = lowState_.imu.gyroscope[0];
-  imu_msg.angular_velocity.y = lowState_.imu.gyroscope[1];
-  imu_msg.angular_velocity.z = lowState_.imu.gyroscope[2];
+  imu_msg.angular_velocity.x = imuData_.angularVel_[0];
+  imu_msg.angular_velocity.y = imuData_.angularVel_[1];
+  imu_msg.angular_velocity.z = imuData_.angularVel_[2];
 
   imu_pub.publish(imu_msg);
   joint_foot_msg.header.stamp = now;
@@ -161,13 +167,16 @@ void UnitreeHW::read(const ros::Time& currTime /*time*/, const ros::Duration& /*
     joint_foot_msg.effort[i] = lowState_.motorState[swap_i].tauEst;
   }
 
-  // read foot_force
+  // read foot_forcesss
   for (int i = 0; i < NUM_LEG; i++) {
     int swap_i = swap_foot_indices[i];  // 1 0 3 2 (index of footForce) (FL FR RL RR) SO
                                         // THE ORDER OF footForce is: FR FL RR RL
-    joint_foot_msg.effort[NUM_DOF + i] = lowState_.footForce[swap_i] - contactBias_[swap_i];
+    joint_foot_msg.effort[NUM_DOF + i] = lowState_.footForce[swap_i] - contactBias_[swap_i] / nReadings;
+    contactForce_[i] = lowState_.footForce[i] - contactBias_[i] / nReadings; // I don't know why but these need to be not swapped
   }
   joint_foot_pub.publish(joint_foot_msg);
+
+  updateJoystick(currTime);
 }
 
 void UnitreeHW::write(const ros::Time& /*time*/, const ros::Duration& /*period*/) {
@@ -178,10 +187,13 @@ void UnitreeHW::write(const ros::Time& /*time*/, const ros::Duration& /*period*/
     lowCmd_.motorCmd[i].Kd = static_cast<float>(jointData_[i].kd_);
     lowCmd_.motorCmd[i].tau = static_cast<float>(jointData_[i].ff_);
   }
-  safety_->PositionLimit(lowCmd_);
-  safety_->PowerProtect(lowCmd_, lowState_, powerLimit_);
-  udp_->SetSend(lowCmd_);
-  udp_->Send();
+
+  if(controllerEnabled){
+    safety_->PositionLimit(lowCmd_);
+    safety_->PowerProtect(lowCmd_, lowState_, powerLimit_);
+    udp_->SetSend(lowCmd_);
+    udp_->Send();
+  }
 
   for (int i = 0; i < 12; ++i) {
     if(contactState_[swap_foot_indices[i / 3]] != contactStatePrev_[swap_foot_indices[i / 3]]){
@@ -258,8 +270,64 @@ bool UnitreeHW::setupImu() {
 bool UnitreeHW::setupContactSensor(ros::NodeHandle& nh) {
   nh.getParam("contact_threshold", contactThreshold_);
   for (size_t i = 0; i < CONTACT_SENSOR_NAMES.size(); ++i) {
-    contactSensorInterface_.registerHandle(ContactSensorHandle(CONTACT_SENSOR_NAMES[i], &contactState_[i]));
+    contactSensorInterface_.registerHandle(ContactSensorHandle(CONTACT_SENSOR_NAMES[i], &contactState_[i], &contactForce_[i]));
   }
   return true;
+}
+
+void UnitreeHW::updateJoystick(const ros::Time& time) {
+  if ((time - lastJoyUpdate_).toSec() < 0.05) {
+    return;
+  }
+  lastJoyUpdate_ = time;
+  xRockerBtnDataStruct keyData;
+  memcpy(&keyData, &lowState_.wirelessRemote[0], 40);
+  // sensor_msgs::Joy joyMsg;  // Pack as same as Logitech F710
+  // joyMsg.axes.push_back(-keyData.lx);
+  // joyMsg.axes.push_back(keyData.ly);
+  // joyMsg.axes.push_back(-keyData.rx);
+  // joyMsg.axes.push_back(keyData.ry);
+  // joyMsg.buttons.push_back(keyData.btn.components.X);
+  // joyMsg.buttons.push_back(keyData.btn.components.A);
+  // joyMsg.buttons.push_back(keyData.btn.components.B);
+  // joyMsg.buttons.push_back(keyData.btn.components.Y);
+  // joyMsg.buttons.push_back(keyData.btn.components.L1);
+  // joyMsg.buttons.push_back(keyData.btn.components.R1);
+  // joyMsg.buttons.push_back(keyData.btn.components.L2);
+  // joyMsg.buttons.push_back(keyData.btn.components.R2);
+  // joyMsg.buttons.push_back(keyData.btn.components.select);
+  // joyMsg.buttons.push_back(keyData.btn.components.start);
+  // joyPublisher_.publish(joyMsg);
+
+  geometry_msgs::Twist twist;
+
+  twist.linear.x = 0.4*keyData.ly;
+  twist.linear.y = 0.4*-keyData.lx;
+  twist.angular.z = -0.5*keyData.rx;
+
+  bool joystickMovedEnough = abs(twist.linear.x) > significantJoystickChange || abs(twist.linear.y) > significantJoystickChange || abs(twist.angular.z) > significantJoystickChange;
+  bool rateLimited = (time - lastCmdVelPub_).toSec() > cmdVelPublishTime;
+  if(joystickMovedEnough && rateLimited){
+    cmdVelPublisher_.publish(twist);
+    lastCmdVelPub_ = time;
+  }
+
+  if(keyData.btn.components.start){
+    controllerEnabled = false;
+  }
+
+  // geometry_msgs::PoseStamped goal;
+
+  // tf2::Quaternion q;
+  // q.setRPY(0, 0, -0.2*keyData.rx); 
+  // geometry_msgs::Quaternion q_msg;
+  // q_msg = tf2::toMsg(q);
+
+  // goal.pose.position.x = 0.2*keyData.ly;
+  // goal.pose.position.y = 0.2*-keyData.lx;
+  // goal.pose.orientation = q_msg;
+  // goal.header.frame_id = "odom";
+
+  // goalPublisher_.publish(goal);
 }
 }  // namespace legged
