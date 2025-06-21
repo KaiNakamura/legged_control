@@ -52,7 +52,7 @@ class KalmanFilterEstimate : public StateEstimateBase {
   double slamYOffset = 0.00;
   double slamZOffset = 0.00;
 
-  double slamSensorNoise = 0.001;
+  double slamSensorNoise = 0.0001;
 
   bool firstSlamUpdate = false;
 
