@@ -44,7 +44,7 @@ class KalmanFilterEstimate : public StateEstimateBase {
   scalar_t imuProcessNoisePosition_ = 0.01;
   scalar_t imuProcessNoiseVelocity_ = 0.01;
   scalar_t footProcessNoisePosition_ = 0.002;
-  scalar_t footSensorNoisePosition_ = 0.005;
+  scalar_t footSensorNoisePosition_ = 0.01;
   scalar_t footSensorNoiseVelocity_ = 0.1;
   scalar_t footHeightSensorNoise_ = 0.01;
 
