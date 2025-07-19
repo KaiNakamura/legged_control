@@ -47,6 +47,9 @@ add_library(${PROJECT_NAME}
         src/WbcBase.cpp
         src/HierarchicalWbc.cpp
         src/WeightedWbc.cpp
+        src/TrunkControllerBase.cpp
+        src/WeightedTrunkController.cpp
+        src/HierarchicalTrunkController.cpp
         )
 
 target_link_libraries(${PROJECT_NAME}

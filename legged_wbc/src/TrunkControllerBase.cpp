@@ -3,7 +3,7 @@
 //
 #include <pinocchio/fwd.hpp>  // forward declarations must be included first.
 
-#include "legged_wbc/WbcBase.h"
+#include "legged_wbc/TrunkControllerBase.h"
 
 #include <ocs2_centroidal_model/AccessHelperFunctions.h>
 #include <ocs2_centroidal_model/ModelHelperFunctions.h>
@@ -13,8 +13,9 @@
 #include <pinocchio/algorithm/rnea.hpp>
 #include <utility>
 
+// State vector takes form {q_b, q_j, lambda} 
 namespace legged {
-WbcBase::WbcBase(const PinocchioInterface& pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics)
+TrunkControllerBase::TrunkControllerBase(const PinocchioInterface& pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics)
     : pinocchioInterfaceMeasured_(pinocchioInterface),
       pinocchioInterfaceDesired_(pinocchioInterface),
       info_(std::move(info)),
@@ -26,8 +27,7 @@ WbcBase::WbcBase(const PinocchioInterface& pinocchioInterface, CentroidalModelIn
   vMeasured_ = vector_t(info_.generalizedCoordinatesNum);
 }
 
-vector_t WbcBase::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode,
-                         scalar_t /*period*/) {
+vector_t TrunkControllerBase::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode) {
   contactFlag_ = modeNumber2StanceLeg(mode);
   numContacts_ = 0;
   for (bool flag : contactFlag_) {
@@ -37,12 +37,11 @@ vector_t WbcBase::update(const vector_t& stateDesired, const vector_t& inputDesi
   }
 
   updateMeasured(rbdStateMeasured);
-  updateDesired(stateDesired, inputDesired);
 
   return {};
 }
 
-void WbcBase::updateMeasured(const vector_t& rbdStateMeasured) {
+void TrunkControllerBase::updateMeasured(const vector_t& rbdStateMeasured) {
   qMeasured_.head<3>() = rbdStateMeasured.segment<3>(3);
   qMeasured_.segment<3>(3) = rbdStateMeasured.head<3>();
   qMeasured_.tail(info_.actuatedDofNum) = rbdStateMeasured.segment(6, info_.actuatedDofNum);
@@ -78,23 +77,17 @@ void WbcBase::updateMeasured(const vector_t& rbdStateMeasured) {
     pinocchio::getFrameJacobianTimeVariation(model, data, info_.endEffectorFrameIndices[i], pinocchio::LOCAL_WORLD_ALIGNED, jac);
     dj_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum) = jac.template topRows<3>();
   }
+
+  // Stance jacobian
+  jst_ = matrix_t::Zero(3 * info_.numThreeDofContacts, info_.generalizedCoordinatesNum);
+  for (size_t i = 0; i < info_.numThreeDofContacts; i++) {
+    if (contactFlag_[i]) {
+      jst_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum);
+    }
+  }
 }
 
-void WbcBase::updateDesired(const vector_t& stateDesired, const vector_t& inputDesired) {
-  const auto& model = pinocchioInterfaceDesired_.getModel();
-  auto& data = pinocchioInterfaceDesired_.getData();
-
-  mapping_.setPinocchioInterface(pinocchioInterfaceDesired_);
-  const auto qDesired = mapping_.getPinocchioJointPosition(stateDesired);
-  pinocchio::forwardKinematics(model, data, qDesired);
-  pinocchio::computeJointJacobians(model, data, qDesired);
-  pinocchio::updateFramePlacements(model, data);
-  updateCentroidalDynamics(pinocchioInterfaceDesired_, info_, qDesired);
-  const vector_t vDesired = mapping_.getPinocchioJointVelocity(stateDesired, inputDesired);
-  pinocchio::forwardKinematics(model, data, qDesired, vDesired);
-}
-
-Task WbcBase::formulateFloatingBaseEomTask() {
+Task TrunkControllerBase::formulateFloatingBaseEomTask() {
   auto& data = pinocchioInterfaceMeasured_.getData();
 
   matrix_t s(info_.actuatedDofNum, info_.generalizedCoordinatesNum);
@@ -107,7 +100,7 @@ Task WbcBase::formulateFloatingBaseEomTask() {
   return {a, b, matrix_t(), vector_t()};
 }
 
-Task WbcBase::formulateTorqueLimitsTask() {
+Task TrunkControllerBase::formulateTorqueLimitsTask() {
   matrix_t d(2 * info_.actuatedDofNum, numDecisionVars_);
   d.setZero();
   matrix_t i = matrix_t::Identity(info_.actuatedDofNum, info_.actuatedDofNum);
@@ -122,7 +115,7 @@ Task WbcBase::formulateTorqueLimitsTask() {
   return {matrix_t(), vector_t(), d, f};
 }
 
-Task WbcBase::formulateNoContactMotionTask() {
+Task TrunkControllerBase::formulateNoContactMotionTask() {
   matrix_t a(3 * numContacts_, numDecisionVars_);
   vector_t b(a.rows());
   a.setZero();
@@ -139,7 +132,65 @@ Task WbcBase::formulateNoContactMotionTask() {
   return {a, b, matrix_t(), vector_t()};
 }
 
-Task WbcBase::formulateFrictionConeTask() {
+// From https://arxiv.org/pdf/1904.04595
+Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
+  auto& data = pinocchioInterfaceMeasured_.getData();
+
+  vector_t linPosDesired = stateDesired.segment(0, 3);
+  vector_t linVelDesired = stateDesired.segment(3, 3);
+  vector_t linAccDesired = stateDesired.segment(6, 3);
+
+  vector_t angPosDesired = stateDesired.segment(9, 3);
+  vector_t angVelDesired = stateDesired.segment(12, 3);
+  vector_t angAccDesired = stateDesired.segment(15, 3);
+
+  vector_t linPosMeasured = qMeasured_.segment(0, 3);
+  vector_t linVelMeasured = vMeasured_.segment(0, 3);
+
+  // Note delete this later
+  linPosDesired(1) = 0.9 - linPosDesired(1);
+  linVelDesired(1) = -linVelDesired(1);
+  linAccDesired(1) = -linAccDesired(1);
+
+  angPosDesired(1) = -angPosDesired(1);
+  angVelDesired(1) = -angVelDesired(1);
+  angAccDesired(1) = -angAccDesired(1);
+
+  vector_t angPosMeasured = qMeasured_.segment(3, 3);
+  vector_t angVelMeasured = vMeasured_.segment(3, 3);
+
+  matrix_t I = matrix_t::Identity(3, 3);
+
+  std::cout << "ad: " << linAccDesired.transpose() << " pd: " << linPosDesired.transpose() << " pm: " << linPosMeasured.transpose() << " vd: " << linVelDesired.transpose() << " vm: " << linVelMeasured.transpose() << std::endl;
+  std::cout << "odd: " << angAccDesired.transpose() << " td: " << angPosDesired.transpose() << " tm: " << angPosMeasured.transpose() << " od: " << angVelDesired.transpose() << " om: " << angVelMeasured.transpose() << std::endl;
+
+  matrix_t angStanceKp = (matrix_t(3,3) << angStanceKp_ , 0, 0,
+                                            0, angStanceKp_, 0,
+                                            0, 0, angStanceKp_).finished();
+  matrix_t linStanceKp = (matrix_t(3,3) << linStanceKp_ , 0, 0,
+                                            0, linStanceKp_, 0,
+                                            0, 0, linStanceKp_).finished();
+  vector_t ddotRRef = linAccDesired + linStanceKp * (linPosDesired - linPosMeasured) + linStanceKd_ * (linVelDesired - linVelMeasured);
+  vector_t dotOmegaRef = angAccDesired + angStanceKp * (angPosDesired - angPosMeasured) + angStanceKd_ * I * (angVelDesired - angVelMeasured); //Note no omegas here it's all derivatives of euler angles
+
+  vector_t ref = vector_t(6);
+  ref << ddotRRef, dotOmegaRef;
+  std::cout << "Ref: " << ref.transpose() << std::endl;
+
+  matrix_t G = matrix_t::Zero(6, numDecisionVars_);
+  vector_t g = vector_t(G.rows());
+  matrix_t I6 = matrix_t::Identity(6, 6);
+
+  G.block(0, 0, 6, 6) = I6;
+  g = ref;
+
+  G.row(1) *= 1.5;
+  g(1) *= 1.5;
+
+  return {G, g, matrix_t(), vector_t()};
+}
+
+Task TrunkControllerBase::formulateFrictionConeTask() {
   matrix_t a(3 * (info_.numThreeDofContacts - numContacts_), numDecisionVars_);
   a.setZero();
   size_t j = 0;
@@ -171,41 +222,28 @@ Task WbcBase::formulateFrictionConeTask() {
   return {a, b, d, f};
 }
 
-Task WbcBase::formulateBaseAccelTask(const vector_t& stateDesired, const vector_t& inputDesired, scalar_t period) {
-  matrix_t a(6, numDecisionVars_);
-  a.setZero();
-  a.block(0, 0, 6, 6) = matrix_t::Identity(6, 6);
 
-  vector_t jointAccel = centroidal_model::getJointVelocities(inputDesired - inputLast_, info_) / period;
-  inputLast_ = inputDesired;
-  mapping_.setPinocchioInterface(pinocchioInterfaceDesired_);
-
-  const auto& model = pinocchioInterfaceDesired_.getModel();
-  auto& data = pinocchioInterfaceDesired_.getData();
-  const auto qDesired = mapping_.getPinocchioJointPosition(stateDesired);
-  const vector_t vDesired = mapping_.getPinocchioJointVelocity(stateDesired, inputDesired);
-
-  const auto& A = getCentroidalMomentumMatrix(pinocchioInterfaceDesired_);
-  const Matrix6 Ab = A.template leftCols<6>();
-  const auto AbInv = computeFloatingBaseCentroidalMomentumMatrixInverse(Ab);
-  const auto Aj = A.rightCols(info_.actuatedDofNum);
-  const auto ADot = pinocchio::dccrba(model, data, qDesired, vDesired);
-  Vector6 centroidalMomentumRate = info_.robotMass * getNormalizedCentroidalMomentumRate(pinocchioInterfaceDesired_, info_, inputDesired);
-  centroidalMomentumRate.noalias() -= ADot * vDesired;
-  centroidalMomentumRate.noalias() -= Aj * jointAccel;
-
-  Vector6 b = AbInv * centroidalMomentumRate;
-
-  return {a, b, matrix_t(), vector_t()};
-}
-
-Task WbcBase::formulateSwingLegTask() {
+Task TrunkControllerBase::formulateSwingLegTask(const vector_t& stateDesired) {
   eeKinematics_->setPinocchioInterface(pinocchioInterfaceMeasured_);
   std::vector<vector3_t> posMeasured = eeKinematics_->getPosition(vector_t());
   std::vector<vector3_t> velMeasured = eeKinematics_->getVelocity(vector_t(), vector_t());
-  eeKinematics_->setPinocchioInterface(pinocchioInterfaceDesired_);
-  std::vector<vector3_t> posDesired = eeKinematics_->getPosition(vector_t());
-  std::vector<vector3_t> velDesired = eeKinematics_->getVelocity(vector_t(), vector_t());
+  for(int i = 0; i < info_.numThreeDofContacts; i++){
+    posMeasured[i](2) -= 0.02;
+  }
+
+  vector_t posDesired = stateDesired.segment(18, 3*info_.numThreeDofContacts);
+  vector_t velDesired = stateDesired.segment(18 + 3*info_.numThreeDofContacts, 3*info_.numThreeDofContacts);
+
+  // Note: Delete this later
+  for (size_t i = 0; i < info_.numThreeDofContacts; ++i) {
+    posDesired(3*i + 1) = 0.9 - posDesired(3*i + 1);
+    velDesired(3*i + 1) = - velDesired(3*i + 1);
+  }
+
+  // std::cout << "ees desired: " << posDesired.transpose() << std::endl; 
+  // std::cout << "ees measured: " << posMeasured[0].transpose() << posMeasured[1].transpose() << posMeasured[2].transpose() << posMeasured[3].transpose() << std::endl; 
+  // std::cout << "evs desired: " << velDesired.transpose() << std::endl;
+  // std::cout << "evs measured: " << velMeasured[0].transpose() << velMeasured[1].transpose() << velMeasured[2].transpose() << velMeasured[3].transpose() << std::endl; 
 
   matrix_t a(3 * (info_.numThreeDofContacts - numContacts_), numDecisionVars_);
   vector_t b(a.rows());
@@ -214,17 +252,28 @@ Task WbcBase::formulateSwingLegTask() {
   size_t j = 0;
   for (size_t i = 0; i < info_.numThreeDofContacts; ++i) {
     if (!contactFlag_[i]) {
-      vector3_t accel = swingKp_ * (posDesired[i] - posMeasured[i]) + swingKd_ * (velDesired[i] - velMeasured[i]);
+      matrix3_t kp(3, 3); matrix3_t kd(3, 3);
+      kp.setZero(); kd.setZero();
+      kp(0,0) = swingKp_; kp(1,1) = swingKp_; kp(2,2) = swingKp_; 
+      kd(0,0) = swingKd_; kd(1,1) = swingKd_; kd(2,2) = 10*swingKd_; 
+
+      vector3_t accel = kp*(posDesired.segment<3>(3*i) - posMeasured[i]) + kd*(velDesired.segment<3>(3*i) - velMeasured[i]);
       a.block(3 * j, 0, 3, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum);
       b.segment(3 * j, 3) = accel - dj_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum) * vMeasured_;
       j++;
+
+      // std::cout << i << "th position: " << posMeasured[i].transpose() << std::endl;
+      // std::cout << i << "th vel: " << velMeasured[i].transpose() << std::endl;
+      // std::cout << i << "th desired: " << posDesired.segment<3>(3*i).transpose() << std::endl;
+      // std::cout << i << "th desired vel: " << velDesired.segment<3>(3*i).transpose() << std::endl;
+      // std::cout << i << "th leg acceleration: " << accel.transpose() << std::endl;
     }
   }
 
   return {a, b, matrix_t(), vector_t()};
 }
 
-Task WbcBase::formulateContactForceTask(const vector_t& inputDesired) const {
+Task TrunkControllerBase::formulateContactForceTask(const vector_t& inputDesired) const {
   matrix_t a(3 * info_.numThreeDofContacts, numDecisionVars_);
   vector_t b(a.rows());
   a.setZero();
@@ -237,16 +286,11 @@ Task WbcBase::formulateContactForceTask(const vector_t& inputDesired) const {
   return {a, b, matrix_t(), vector_t()};
 }
 
-void WbcBase::loadTasksSetting(const std::string& taskFile, bool verbose) {
+void TrunkControllerBase::loadTasksSetting(const std::string& taskFile, bool verbose) {
   // Load task file
   torqueLimits_ = vector_t(info_.actuatedDofNum / 4);
   loadData::loadEigenMatrix(taskFile, "torqueLimitsTask", torqueLimits_);
-  if (verbose) {
-    std::cerr << "\n #### Torque Limits Task:";
-    std::cerr << "\n #### =============================================================================\n";
-    std::cerr << "\n #### HAA HFE KFE: " << torqueLimits_.transpose() << "\n";
-    std::cerr << " #### =============================================================================\n";
-  }
+
   boost::property_tree::ptree pt;
   boost::property_tree::read_info(taskFile, pt);
   std::string prefix = "frictionConeTask.";
@@ -258,6 +302,7 @@ void WbcBase::loadTasksSetting(const std::string& taskFile, bool verbose) {
   if (verbose) {
     std::cerr << " #### =============================================================================\n";
   }
+
   prefix = "swingLegTask.";
   if (verbose) {
     std::cerr << "\n #### Swing Leg Task:";
@@ -265,6 +310,22 @@ void WbcBase::loadTasksSetting(const std::string& taskFile, bool verbose) {
   }
   loadData::loadPtreeValue(pt, swingKp_, prefix + "kp", verbose);
   loadData::loadPtreeValue(pt, swingKd_, prefix + "kd", verbose);
+  if (verbose) {
+    std::cerr << " #### =============================================================================\n";
+  }
+
+  prefix = "movementTask.";
+  if (verbose) {
+    std::cerr << "\n #### Movement Task:";
+    std::cerr << "\n #### =============================================================================\n";
+  }
+  loadData::loadPtreeValue(pt, linStanceKp_, prefix + "linkp", verbose);
+  loadData::loadPtreeValue(pt, linStanceKd_, prefix + "linkd", verbose);
+  loadData::loadPtreeValue(pt, angStanceKp_, prefix + "angkp", verbose);
+  loadData::loadPtreeValue(pt, angStanceKd_, prefix + "angkd", verbose);
+  if (verbose) {
+    std::cerr << " #### =============================================================================\n";
+  }
 }
 
 }  // namespace legged

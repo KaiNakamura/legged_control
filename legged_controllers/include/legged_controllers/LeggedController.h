@@ -16,6 +16,7 @@
 #include <legged_estimation/StateEstimateBase.h>
 #include <legged_interface/LeggedInterface.h>
 #include <legged_wbc/WbcBase.h>
+#include <legged_wbc/TrunkControllerBase.h>
 
 #include "legged_controllers/SafetyChecker.h"
 #include "legged_controllers/visualization/LeggedSelfCollisionVisualization.h"
@@ -86,6 +87,7 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
 
   // Whole Body Control
   std::shared_ptr<WbcBase> wbc_;
+  std::shared_ptr<TrunkControllerBase> tc_;
   std::shared_ptr<SafetyChecker> safetyChecker_;
 
   // Nonlinear MPC
@@ -103,6 +105,7 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
 
   bool mipActivated = false;
   ros::Time mipStartTime;
+  ros::Time time_;
   ros::Subscriber mipActivationSub;
 
   std::string eePosFile;

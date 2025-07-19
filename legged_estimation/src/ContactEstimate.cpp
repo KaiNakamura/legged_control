@@ -126,7 +126,7 @@ size_t ContactEstimate::update(scalar_t time, const ros::Duration& period, vecto
     //   ST.block(6 + 3 * i, 3 * i, 3, 3).setIdentity();
     // }
 
-    if(modeNumber2StanceLeg(modeSchedule_.modeAtTime(time))[i]){
+    if(true){
       ST.block(6 + 3 * i, 3 * i, 3, 3).setIdentity();
     }
   }

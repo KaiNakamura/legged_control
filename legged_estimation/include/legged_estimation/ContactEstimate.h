@@ -7,7 +7,6 @@
 #include <ocs2_centroidal_model/CentroidalModelPinocchioMapping.h>
 #include <ocs2_pinocchio_interface/PinocchioEndEffectorKinematics.h>
 #include <ocs2_legged_robot/gait/MotionPhaseDefinition.h>
-#include <ocs2_pinocchio_interface/PinocchioEndEffectorKinematics.h>
 
 #include <realtime_tools/realtime_buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
