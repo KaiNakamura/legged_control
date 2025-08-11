@@ -55,7 +55,7 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   // Interface
   std::shared_ptr<LeggedInterface> leggedInterface_;
   std::shared_ptr<PinocchioEndEffectorKinematics> eeKinematicsPtr_;
-  std::vector<HybridJointHandle> hybridJointHandles_;
+  std::vector<HybridJointHandle> hybridJointHandles_, switcherHandles_, rollerHandles_;
   std::vector<ContactSensorHandle> contactHandles_;
   hardware_interface::ImuSensorHandle imuSensorHandle_;
 
@@ -129,6 +129,9 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   std::atomic_bool controllerRunning_{}, mpcRunning_{};
   benchmark::RepeatedTimer mpcTimer_;
   benchmark::RepeatedTimer wbcTimer_;
+
+  std::vector<std::string> switcher_names{"LF_switcher", "LH_switcher", "RF_switcher", "RH_switcher"};
+  std::vector<std::string> roller_names{"LF_roller", "LH_roller", "RF_roller", "RH_roller"};
 };
 
 class LeggedCheaterController : public LeggedController {

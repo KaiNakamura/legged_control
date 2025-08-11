@@ -27,6 +27,7 @@ class StateEstimateBase {
   StateEstimateBase(PinocchioInterface pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics);
   virtual void updateJointStates(const vector_t& jointPos, const vector_t& jointVel);
   virtual void updateContact(contact_flag_t contactFlag) { contactFlag_ = contactFlag; }
+  virtual void updateType(vector_t eeTypes) { eeTypes_ = eeTypes;}
   virtual void updateImu(const Eigen::Quaternion<scalar_t>& quat, const vector3_t& angularVelLocal, const vector3_t& linearAccelLocal,
                          const matrix3_t& orientationCovariance, const matrix3_t& angularVelCovariance,
                          const matrix3_t& linearAccelCovariance);
@@ -47,6 +48,7 @@ class StateEstimateBase {
   vector3_t zyxOffset_ = vector3_t::Zero();
   vector_t rbdState_;
   contact_flag_t contactFlag_{};
+  vector_t eeTypes_{};
   Eigen::Quaternion<scalar_t> quat_;
   vector3_t angularVelLocal_, linearAccelLocal_;
   matrix3_t orientationCovariance_, angularVelCovariance_, linearAccelCovariance_;

@@ -80,12 +80,15 @@ class LeggedHWSim : public gazebo_ros_control::DefaultRobotHWSim {
   void parseContacts(XmlRpc::XmlRpcValue& contactNames);
 
   HybridJointInterface hybridJointInterface_;
+  HybridJointInterface pJointInterface_;
   ContactSensorInterface contactSensorInterface_;
   hardware_interface::ImuSensorInterface imuSensorInterface_;
 
   gazebo::physics::ContactManager* contactManager_{};
 
   std::list<HybridJointData> hybridJointDatas_;
+  std::list<HybridJointData> pJointDatas_;
+
   std::list<ImuData> imuDatas_;
   std::unordered_map<std::string, std::deque<HybridJointCommand> > cmdBuffer_;
   std::unordered_map<std::string, bool> name2contact_;

@@ -11,13 +11,13 @@
     <param name="referenceFile" value="$(find legged_controllers)/config/$(arg robot_type)/reference.info"/>
     <param name="gaitCommandFile" value="$(find legged_controllers)/config/$(arg robot_type)/gait.info"/>
 
-    <param name="eePos" value="$(find legged_controllers)/config/csv_files/eePos.csv"/>
-    <param name="eeRegions" value="$(find legged_controllers)/config/csv_files/eeRegions.csv"/>
-    <param name="eeTypes" value="$(find legged_controllers)/config/csv_files/eeTypes.csv"/>
-    <param name="forces" value="$(find legged_controllers)/config/csv_files/forces.csv"/>
-    <param name="states" value="$(find legged_controllers)/config/csv_files/states.csv"/>
-    <param name="swings" value="$(find legged_controllers)/config/csv_files/swings.csv"/>
-    <param name="time" value="$(find legged_controllers)/config/csv_files/time.csv"/>
+    <param name="eePos" value="$(find legged_controllers)/config/csv_files_wheel/eePos.csv"/>
+    <param name="eeRegions" value="$(find legged_controllers)/config/csv_files_wheel/eeRegions.csv"/>
+    <param name="eeTypes" value="$(find legged_controllers)/config/csv_files_wheel/eeTypes.csv"/>
+    <param name="forces" value="$(find legged_controllers)/config/csv_files_wheel/forces.csv"/>
+    <param name="states" value="$(find legged_controllers)/config/csv_files_wheel/states.csv"/>
+    <param name="swings" value="$(find legged_controllers)/config/csv_files_wheel/swings.csv"/>
+    <param name="time" value="$(find legged_controllers)/config/csv_files_wheel/time.csv"/>
 
 
     <rosparam file="$(find legged_controllers)/config/controllers.yaml" command="load"/>

@@ -8,11 +8,11 @@
 
 namespace legged {
 
-vector_t WeightedTrunkController::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode) {
-  TrunkControllerBase::update(stateDesired, inputDesired, rbdStateMeasured, mode);
+vector_t WeightedTrunkController::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode, vector_t typeFlag) {
+  TrunkControllerBase::update(stateDesired, inputDesired, rbdStateMeasured, mode, typeFlag);
 
   // Constraints
-  Task constraints = formulateConstraints();
+  Task constraints = formulateConstraints(stateDesired);
   size_t numConstraints = constraints.b_.size() + constraints.f_.size();
 
   Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> A(numConstraints, getNumDecisionVars());
@@ -46,13 +46,13 @@ vector_t WeightedTrunkController::update(const vector_t& stateDesired, const vec
   return qpSol;
 }
 
-Task WeightedTrunkController::formulateConstraints() {
+Task WeightedTrunkController::formulateConstraints(const vector_t& stateDesired) {
   return formulateFloatingBaseEomTask() + formulateFrictionConeTask() + formulateNoContactMotionTask() + formulateTorqueLimitsTask();
 }
 
 Task WeightedTrunkController::formulateWeightedTasks(const vector_t& stateDesired, const vector_t& inputDesired) {
   return formulateSwingLegTask(stateDesired) * weightSwingLeg_ + formulateBaseAccelTask(stateDesired) * weightBaseAccel_ +
-         formulateContactForceTask(inputDesired) * weightContactForce_;
+         formulateContactForceTask(inputDesired) * weightContactForce_ + formulateRollingTask(stateDesired);
 }
 
 void WeightedTrunkController::loadTasksSetting(const std::string& taskFile, bool verbose) {
@@ -66,6 +66,7 @@ void WeightedTrunkController::loadTasksSetting(const std::string& taskFile, bool
     std::cerr << "\n #### =============================================================================\n";
   }
   loadData::loadPtreeValue(pt, weightSwingLeg_, prefix + "swingLeg", verbose);
+  loadData::loadPtreeValue(pt, weightRollingLeg_, prefix + "rollingLeg", verbose);
   loadData::loadPtreeValue(pt, weightBaseAccel_, prefix + "baseAccel", verbose);
   loadData::loadPtreeValue(pt, weightContactForce_, prefix + "contactForce", verbose);
 }

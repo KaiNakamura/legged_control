@@ -27,8 +27,9 @@ TrunkControllerBase::TrunkControllerBase(const PinocchioInterface& pinocchioInte
   vMeasured_ = vector_t(info_.generalizedCoordinatesNum);
 }
 
-vector_t TrunkControllerBase::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode) {
+vector_t TrunkControllerBase::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode, vector_t typeFlag) {
   contactFlag_ = modeNumber2StanceLeg(mode);
+  typeFlag_ = typeFlag;
   numContacts_ = 0;
   for (bool flag : contactFlag_) {
     if (flag) {
@@ -123,8 +124,14 @@ Task TrunkControllerBase::formulateNoContactMotionTask() {
   size_t j = 0;
   for (size_t i = 0; i < info_.numThreeDofContacts; i++) {
     if (contactFlag_[i]) {
-      a.block(3 * j, 0, 3, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum);
-      b.segment(3 * j, 3) = -dj_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum) * vMeasured_;
+      if(typeFlag_[i] == 0){
+        a.block(3 * j, 0, 3, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum);
+        b.segment(3 * j, 3) = -dj_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum) * vMeasured_;
+      }
+      else if(typeFlag_[i] == 1){
+        a.block(3 * j + 1, 0, 2, info_.generalizedCoordinatesNum) = j_.block(3 * i + 1, 0, 2, info_.generalizedCoordinatesNum);
+        b.segment(3 * j + 1, 2) = -dj_.block(3 * i + 1, 0, 2, info_.generalizedCoordinatesNum) * vMeasured_;
+      }
       j++;
     }
   }
@@ -132,6 +139,35 @@ Task TrunkControllerBase::formulateNoContactMotionTask() {
   return {a, b, matrix_t(), vector_t()};
 }
 
+Task TrunkControllerBase::formulateRollingTask(const vector_t& stateDesired) {
+  matrix_t a(numContacts_, numDecisionVars_);
+  vector_t b(a.rows());
+  a.setZero();
+  b.setZero();
+  size_t j = 0;
+
+  for (size_t i = 0; i < info_.numThreeDofContacts; i++) {
+    if(contactFlag_[i] && typeFlag_[i] == 1){
+      eeKinematics_->setPinocchioInterface(pinocchioInterfaceMeasured_);
+      std::vector<vector3_t> posMeasured = eeKinematics_->getPosition(vector_t());
+      std::vector<vector3_t> velMeasured = eeKinematics_->getVelocity(vector_t(), vector_t());
+
+      vector_t posDesired = stateDesired.segment(18, 3*i);
+      vector_t relativePosDesired = qMeasured_.segment(0, 3) - (stateDesired.segment(0, 3) - stateDesired.segment(18 + 3*i, 3));
+
+      double accel = rollingKp_*(relativePosDesired(0) - posMeasured[i](0)) + rollingKd_*(vMeasured_(0) - velMeasured[i](0));
+
+      a.block(j, 0, 1, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 1, info_.generalizedCoordinatesNum);
+      b.segment(j, 1) = -dj_.block(3 * i, 0, 1, info_.generalizedCoordinatesNum) * vMeasured_ + (vector_t(1) << accel).finished();
+      j++;
+
+      // std::cout << "error here!!!!" << std::endl;
+      std::cout << i << " roll accel: " << accel << " dpos: " << relativePosDesired(0) << " mpos: " << posMeasured[i](0) << " dvel: " << vMeasured_(0) << " mvel: " << velMeasured[i](0) << std::endl;
+    }
+  }
+
+  return {a, b, matrix_t(), vector_t()};
+}
 // From https://arxiv.org/pdf/1904.04595
 Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
   auto& data = pinocchioInterfaceMeasured_.getData();
@@ -187,6 +223,9 @@ Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
   G.row(1) *= 1.5;
   g(1) *= 1.5;
 
+  G.row(0) *= 1.2;
+  g(0) *= 1.2;
+
   return {G, g, matrix_t(), vector_t()};
 }
 
@@ -209,12 +248,24 @@ Task TrunkControllerBase::formulateFrictionConeTask() {
                      0, 1, -frictionCoeff_,
                      0,-1, -frictionCoeff_;  // clang-format on
 
+  matrix_t frictionPyramicWheel(5, 3);  // clang-format off
+  frictionPyramicWheel << 0, 0, -1,
+                          1, 0, -frictionWheelCoeff_,
+                          -1, 0, -frictionWheelCoeff_,
+                          0, 1, -frictionCoeff_,
+                          0,-1, -frictionCoeff_;  // clang-format on
+
   matrix_t d(5 * numContacts_ + 3 * (info_.numThreeDofContacts - numContacts_), numDecisionVars_);
   d.setZero();
   j = 0;
   for (size_t i = 0; i < info_.numThreeDofContacts; ++i) {
     if (contactFlag_[i]) {
-      d.block(5 * j++, info_.generalizedCoordinatesNum + 3 * i, 5, 3) = frictionPyramic;
+      if(typeFlag_[i] == 0){
+        d.block(5 * j++, info_.generalizedCoordinatesNum + 3 * i, 5, 3) = frictionPyramic;
+      }
+      else{
+        d.block(5 * j++, info_.generalizedCoordinatesNum + 3 * i, 5, 3) = frictionPyramicWheel;
+      }
     }
   }
   vector_t f = Eigen::VectorXd::Zero(d.rows());
@@ -262,11 +313,11 @@ Task TrunkControllerBase::formulateSwingLegTask(const vector_t& stateDesired) {
       b.segment(3 * j, 3) = accel - dj_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum) * vMeasured_;
       j++;
 
-      // std::cout << i << "th position: " << posMeasured[i].transpose() << std::endl;
-      // std::cout << i << "th vel: " << velMeasured[i].transpose() << std::endl;
-      // std::cout << i << "th desired: " << posDesired.segment<3>(3*i).transpose() << std::endl;
-      // std::cout << i << "th desired vel: " << velDesired.segment<3>(3*i).transpose() << std::endl;
-      // std::cout << i << "th leg acceleration: " << accel.transpose() << std::endl;
+      std::cout << i << "th position: " << posMeasured[i].transpose() << std::endl;
+      std::cout << i << "th vel: " << velMeasured[i].transpose() << std::endl;
+      std::cout << i << "th desired: " << posDesired.segment<3>(3*i).transpose() << std::endl;
+      std::cout << i << "th desired vel: " << velDesired.segment<3>(3*i).transpose() << std::endl;
+      std::cout << i << "th leg acceleration: " << accel.transpose() << std::endl;
     }
   }
 
@@ -299,6 +350,7 @@ void TrunkControllerBase::loadTasksSetting(const std::string& taskFile, bool ver
     std::cerr << "\n #### =============================================================================\n";
   }
   loadData::loadPtreeValue(pt, frictionCoeff_, prefix + "frictionCoefficient", verbose);
+  loadData::loadPtreeValue(pt, frictionWheelCoeff_, prefix + "frictionWheelCoefficient", verbose);
   if (verbose) {
     std::cerr << " #### =============================================================================\n";
   }
@@ -310,6 +362,17 @@ void TrunkControllerBase::loadTasksSetting(const std::string& taskFile, bool ver
   }
   loadData::loadPtreeValue(pt, swingKp_, prefix + "kp", verbose);
   loadData::loadPtreeValue(pt, swingKd_, prefix + "kd", verbose);
+  if (verbose) {
+    std::cerr << " #### =============================================================================\n";
+  }
+
+  prefix = "rollingTask.";
+  if (verbose) {
+    std::cerr << "\n #### Rolling Task:";
+    std::cerr << "\n #### =============================================================================\n";
+  }
+  loadData::loadPtreeValue(pt, rollingKp_, prefix + "kp", verbose);
+  loadData::loadPtreeValue(pt, rollingKd_, prefix + "kd", verbose);
   if (verbose) {
     std::cerr << " #### =============================================================================\n";
   }

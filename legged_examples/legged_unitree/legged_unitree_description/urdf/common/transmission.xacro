@@ -37,6 +37,28 @@
             </actuator>
         </transmission>
 
+        <transmission name="${prefix}_switcher_tran">
+            <type>transmission_interface/SimpleTransmission</type>
+            <joint name="${prefix}_switcher">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            </joint>
+            <actuator name="${prefix}_switcher_motor">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+                <mechanicalReduction>1</mechanicalReduction>
+            </actuator>
+        </transmission>
+
+        <transmission name="${prefix}_roller_tran">
+            <type>transmission_interface/SimpleTransmission</type>
+            <joint name="${prefix}_roller">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            </joint>
+            <actuator name="${prefix}_roller_motor">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+                <mechanicalReduction>1</mechanicalReduction>
+            </actuator>
+        </transmission>
+
     </xacro:macro>
 
 </robot>

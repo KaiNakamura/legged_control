@@ -11,7 +11,7 @@ class HierarchicalTrunkController : public TrunkControllerBase {
  public:
   using TrunkControllerBase::TrunkControllerBase;
 
-  vector_t update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode) override;
+  vector_t update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode, vector_t typeFlag) override;
 };
 
 }  // namespace legged

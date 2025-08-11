@@ -246,7 +246,8 @@ R
 
 frictionConeSoftConstraint
 {
-  frictionCoefficient    0.7
+  frictionCoefficient    0.3
+  frictionWheelCoefficient    0.03
 
   ; relaxed log barrier parameters
   mu                     0.1
@@ -290,7 +291,7 @@ torqueLimitsTask
 
 frictionConeTask
 {
-  frictionCoefficient    0.7
+  frictionCoefficient    0.3
 }
 
 swingLegTask
@@ -299,10 +300,17 @@ swingLegTask
     kd                   37
 }
 
+rollingTask
+{
+    kp                   350
+    kd                   37
+}
+
+
 movementTask
 {
     linkp                   350
-    linkd                   10
+    linkd                   50
     angkp                   1
     angkd                   100
 }
@@ -310,6 +318,7 @@ movementTask
 weight
 {
     swingLeg        100
+    rollingLeg      0.0
     baseAccel       1
     contactForce    0.01
 }

@@ -1,0 +1,13 @@
+    material wheelTexture
+    {
+        technique
+        {
+            pass
+            {
+                texture_unit
+                {
+                    texture ./wheelTexture.png
+                }
+            }
+        }
+    }

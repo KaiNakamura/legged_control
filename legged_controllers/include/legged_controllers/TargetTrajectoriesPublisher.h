@@ -53,9 +53,9 @@ class TargetTrajectoriesPublisher final {
       
       if(numPubs == 0){
         vector_t cmdGoal = vector_t::Zero(6);
-        cmdGoal[0] = 0.19;
-        cmdGoal[1] = 0.45;
-        cmdGoal[2] = 0.25;
+        cmdGoal[0] = 0.16;
+        cmdGoal[1] = 0.49;
+        cmdGoal[2] = 0.3;
         Eigen::Quaternion<scalar_t> q(pose.pose.orientation.w, pose.pose.orientation.x, pose.pose.orientation.y, pose.pose.orientation.z);
         cmdGoal[3] = 0;
         cmdGoal[4] = 0;

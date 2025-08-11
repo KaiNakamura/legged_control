@@ -115,6 +115,11 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     ps_.segment(3 * i, 3) = -eePos[i];
     ps_.segment(3 * i, 3)[2] += footRadius_;
     vs_.segment(3 * i, 3) = -eeVel[i];
+
+    if(eeTypes_(i) == 1){
+      ps_.segment(3*i, 3)[0] += dt*xHat_(3) + dt*dt*0.5*xHat_(0);
+      vs_.segment(3*i, 3)[0] += dt*xHat_(0);
+    }
   }
 
   vector3_t g(0, 0, -9.81);

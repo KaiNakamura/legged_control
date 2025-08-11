@@ -39,7 +39,6 @@
 
     <xacro:IMU connected_to="base" imu_name="unitree_imu" xyz="0. 0. 0." rpy="0. 0. 0."/>
 
-
     <xacro:leg prefix="LF" mesh_path="${mesh_path}" mirror="1" mirror_dae="True" front_hind="1" front_hind_dae="True">
         <origin rpy="0 0 0" xyz="${leg_offset_x} ${leg_offset_y} 0"/>
     </xacro:leg>
@@ -60,7 +59,5 @@
     <!-- <xacro:include filename="$(find legged_unitree_description)/urdf/onshape_robot.xacro"/>
     <xacro:include_onshape_robot prefix="onshape_"/> -->
 
-
     
-
 </robot>

@@ -77,6 +77,15 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
   for (const auto& joint_name : joint_names) {
     hybridJointHandles_.push_back(hybridJointInterface->getHandle(joint_name));
   }
+
+  for (const auto& switcher_name : switcher_names) {
+    switcherHandles_.push_back(hybridJointInterface->getHandle(switcher_name));
+  }
+
+  for (const auto& roller_name : roller_names) {
+    rollerHandles_.push_back(hybridJointInterface->getHandle(roller_name));
+  }
+
   auto* contactInterface = robot_hw->get<ContactSensorInterface>();
   for (const auto& name : leggedInterface_->modelSettings().contactNames3DoF) {
     contactHandles_.push_back(contactInterface->getHandle(name));
@@ -105,6 +114,7 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
 void LeggedController::starting(const ros::Time& time) {
   // Initial state
   currentObservation_.state.setZero(leggedInterface_->getCentroidalModelInfo().stateDim);
+  stateEstimate_->updateType((vector_t(4) << 0, 0, 0, 0).finished());
   updateStateEstimation(time, ros::Duration(0.002));
   currentObservation_.input.setZero(leggedInterface_->getCentroidalModelInfo().inputDim);
   currentObservation_.mode = ModeNumber::STANCE;
@@ -139,7 +149,7 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   std::cout << "Elapsed: " << elapsedTime.sec + elapsedTime.nsec/1.0e9 << std::endl;
   // std::cout << "Mip activated:" << mipActivated << std::endl;
 
-  if(!mipActivated || elapsedTime.sec + elapsedTime.nsec/1.0e9 <= 0.03 || elapsedTime.sec >= 8.0){
+  if(!mipActivated || elapsedTime.sec + elapsedTime.nsec/1.0e9 <= 0.03){
 
     if(measuredRbdState_(5) > 0.15){
       currentObservation_.mode = updatedMode;
@@ -202,11 +212,19 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
     velDes = centroidal_model::getJointVelocities(optimizedInput, leggedInterface_->getCentroidalModelInfo());
     // std::cout << "torque: " << torque.transpose() << std::endl;
 
+    for(int i = 0; i < switcherHandles_.size(); i++){
+      switcherHandles_[i].setCommand(0.05, 0, 10000, 0, 0);
+    }
   }
   else{    
     double knotTime = times[1] - times[0];
-    int idx = (int)((elapsedTime.sec + elapsedTime.nsec/1.0e9)/knotTime);
+
+    int idx = times.size()-2;
+    if(elapsedTime.sec + elapsedTime.nsec/1.0e9 < times[times.size()-2]){
+      idx = (int)((elapsedTime.sec + elapsedTime.nsec/1.0e9)/knotTime);
+    }    
     int swingIdx = idx / (times.size()/swings[0].size());
+
     // std::cout << "Idx: " << idx << std::endl;
     // std::cout << "Swing Idx: " << swingIdx << std::endl;
 
@@ -219,60 +237,18 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
     // Load csv data into optimized state vector
     // Change from xyz format to zyx
     Eigen::VectorXd hqb = Eigen::VectorXd::Zero(info.generalizedCoordinatesNum);
-    hqb << states[0][idx], states[1][idx], states[2][idx]+0.05, states[3][idx], states[4][idx], states[5][idx], states[6][idx], states[7][idx], states[8][idx], 
-            states[11][idx], states[10][idx], 0, states[14][idx], states[13][idx], 0, states[17][idx], states[16][idx], states[15][idx];
+    hqb << states[0][idx], states[1][idx], states[2][idx], states[3][idx], states[4][idx], states[5][idx], states[6][idx], states[7][idx], states[8][idx], 
+            states[11][idx], states[10][idx], states[9][idx], states[14][idx], states[13][idx], states[12][idx], states[17][idx], states[16][idx], states[15][idx];
     // hqb << states[0][0], states[1][0], 0.3, states[3][0], states[4][0], states[5][0], states[6][0], states[7][0], states[8][0], 
     //         states[11][0], states[10][0], states[9][0], states[14][0], states[13][0], states[12][0], states[17][0], states[16][0], states[15][0];
 
     Eigen::VectorXd hqbNext = Eigen::VectorXd::Zero(info.generalizedCoordinatesNum);
-    hqbNext << states[0][idx + 1], states[1][idx + 1], states[2][idx + 1]+0.05, states[3][idx + 1], states[4][idx + 1], states[5][idx + 1], states[6][idx + 1], states[7][idx + 1], states[8][idx + 1], 
-            states[11][idx + 1], states[10][idx + 1], 0, states[14][idx + 1], states[13][idx + 1], 0, states[17][idx + 1], states[16][idx + 1], states[15][idx + 1];
+    hqbNext << states[0][idx + 1], states[1][idx + 1], states[2][idx + 1], states[3][idx + 1], states[4][idx + 1], states[5][idx + 1], states[6][idx + 1], states[7][idx + 1], states[8][idx + 1], 
+            states[11][idx + 1], states[10][idx + 1], states[9][idx + 1], states[14][idx + 1], states[13][idx + 1], states[12][idx + 1], states[17][idx + 1], states[16][idx + 1], states[15][idx + 1];
 
     double t = (elapsedTime.sec + elapsedTime.nsec/1.0e9)/knotTime - idx;
-    // std::cout << "t: " << t << std::endl; 
     for(int i = 0; i < 18; i++){
       hqb(i) = (1-t)*hqb(i) + t*hqbNext(i);
-      // double x0 = hqb(i);
-      // double v0 = hqb(i+3);
-      // double a0 = hqb(i+6);
-
-      // double xf = hqbNext(i);
-      // double vf = hqbNext(i+3);
-      // double af = hqbNext(i+6);
-
-      // double a = x0;
-      // double b = v0;
-      // double c = a0/2;
-      // double d = -10*x0 + 10*xf - 6*v0 - 4*vf - 3/2*a0 + af/2;
-      // double e = 15*x0 - 15*xf + 8*v0 + 7*vf + 3/2*a0 - af;
-      // double f = -6*x0 + 6*xf - 3*v0 - 3*vf - a0/2 + af/2;
-
-      // // std::cout << "x0: " << x0 << " v0: " << v0 << " a0: " << a0 << " xf: " << xf << " vf: " << vf << " af: " << af << std::endl;
-
-      // hqb(i) = a + b*t + c*pow(t,2) + d*pow(t,3) + e*pow(t,4) + f*pow(t,5);
-      // hqb(i+3) = b + 2*c*t + 3*d*pow(t,2) + 4*e*pow(t,3) + 5*f*pow(t,4);
-      // hqb(i+6) = 2*c + 6*d*t + 12*e*pow(t,2) + 20*f*pow(t,3);
-
-      // // std::cout << "x: " << hqb(i) << " v: " << hqb(i+3) << " a: " << hqb(i+6) << std::endl;
-
-      // x0 = hqb(i);
-      // v0 = hqb(i+3);
-      // a0 = hqb(i+6);
-
-      // xf = hqbNext(i);
-      // vf = hqbNext(i+3);
-      // af = hqbNext(i+6);
-
-      // a = x0;
-      // b = v0;
-      // c = a0/2;
-      // d = -10*x0 + 10*xf - 6*v0 - 4*vf - 3/2*a0 + af/2;
-      // e = 15*x0 - 15*xf + 8*v0 + 7*vf + 3/2*a0 - af;
-      // f = -6*x0 + 6*xf - 3*v0 - 3*vf - a0/2 + af/2;
-
-      // hqb(i+9) = a + b*t + c*pow(t,2) + d*pow(t,3) + e*pow(t,4) + f*pow(t,5);
-      // hqb(i+12) = b + 2*c*t + 3*d*pow(t,2) + 4*e*pow(t,3) + 5*f*pow(t,4);
-      // hqb(i+15) = 2*c + 6*d*t + 12*e*pow(t,2) + 20*f*pow(t,3);
     }
     optimizedState.segment<18>(0) = hqb;
 
@@ -284,6 +260,28 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
       }
     }
     // currMode = 15;
+    vector_t qMeasured = vector_t(info.generalizedCoordinatesNum);
+    vector_t vMeasured = vector_t(info.generalizedCoordinatesNum);
+
+    const auto& model = leggedInterface_->getPinocchioInterface().getModel();
+    auto& data = leggedInterface_->getPinocchioInterface().getData();
+
+    qMeasured.head<3>() = measuredRbdState_.segment<3>(3);
+    qMeasured.segment<3>(3) = measuredRbdState_.head<3>();
+    qMeasured.tail(info.actuatedDofNum) = measuredRbdState_.segment(6, info.actuatedDofNum);
+    vMeasured.head<3>() = measuredRbdState_.segment<3>(info.generalizedCoordinatesNum + 3);
+    vMeasured.segment<3>(3) = getEulerAnglesZyxDerivativesFromGlobalAngularVelocity<scalar_t>(
+      qMeasured.segment<3>(3), measuredRbdState_.segment<3>(info.generalizedCoordinatesNum));
+    vMeasured.tail(info.actuatedDofNum) = measuredRbdState_.segment(info.generalizedCoordinatesNum + 6, info.actuatedDofNum);
+
+    pinocchio::forwardKinematics(model, data, qMeasured, vMeasured);
+    pinocchio::updateFramePlacements(model, data);
+    std::vector<vector3_t> footPos = eeKinematicsPtr_->getPosition(vector_t());
+    std::vector<vector3_t> footVel = eeKinematicsPtr_->getVelocity(vector_t(), vector_t());
+
+    for(int i = 0; i < info.numThreeDofContacts; i++){
+      footPos[i](2) -= 0.02;
+    }
 
     Eigen::VectorXd ees = Eigen::VectorXd::Zero(3*info.numThreeDofContacts);
     Eigen::VectorXd evs = Eigen::VectorXd::Zero(3*info.numThreeDofContacts);
@@ -299,13 +297,13 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         evel << 0, 0, 0;
       }
       else{
-        vector_t P1 = vector_t(3); vector_t P2 = vector_t(3); vector_t P3 = vector_t(3);
-        matrix_t Mq = (matrix_t(6,2) << 1, 0,
-                                        0, 0,
-                                        0, 0,
-                                        -10, 10,
-                                        15, -15,
-                                        -6, 6).finished();
+        vector_t P1 = vector_t(3); vector_t P2 = vector_t(3); vector_t P3 = vector_t(3); vector_t V1 = vector_t(3); vector_t V3 = vector_t(3); vector_t A1 = vector_t(3); vector_t A3 = vector_t(3); 
+        matrix_t Mq = (matrix_t(6,6) << 1, 0, 0, 0, 0, 0,
+                                        0, 0, 1, 0, 0, 0,
+                                        0, 0, 0, 0, 0.5, 0,
+                                        -10, 10, -6, -4, -1.5, 0.5,
+                                        15, -15, 8, 7, 1.5, -1,
+                                        -6, 6, -3, -3, -0.5, 0.5).finished();
         matrix_t Ms = (matrix_t(8,3) << 1, 0, 0,
                                         0, 0, 0,
                                         0, 0, 0,
@@ -320,10 +318,21 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         P1 << eePos[0 + 3*i][liftIdx], eePos[1 + 3*i][liftIdx], eePos[2 + 3*i][liftIdx];
         P3 << eePos[0 + 3*i][landIdx], eePos[1 + 3*i][landIdx], eePos[2 + 3*i][landIdx];     
         P2 << (P1(0) + P3(0))/2.0, (P1(1) + P3(1))/2.0, std::max(P1(2), P2(2)) + swingHeight;
-        // std::cout << "t: " << t << std::endl;
 
-        vector_t vx = (vector_t(2) << P1(0), P3(0)).finished();
-        vector_t vy = (vector_t(2) << P1(1), P3(1)).finished();
+        V1 << (eePos[0 + 3*i][liftIdx]-eePos[0 + 3*i][liftIdx-1])/knotTime, (eePos[1 + 3*i][liftIdx]-eePos[1 + 3*i][liftIdx-1])/knotTime, (eePos[2 + 3*i][liftIdx]-eePos[2 + 3*i][liftIdx-1])/knotTime;
+        if(eeTypes[i][swingIdx] == 0){
+          V3 << 0, 0, 0;
+        }
+        else {
+          V3 << states[3][landIdx], 0, 0;
+        }
+        A1 << 0, 0, 0;
+        A3 << 0, 0, 0;
+
+        // std::cout << "leg " << i << " type " << eeTypes[i][swingIdx] << " v: " << V3.transpose() << std::endl;
+
+        vector_t vx = (vector_t(6) << P1(0), P3(0), V1(0), V3(0), A1(0), A3(0)).finished();
+        vector_t vy = (vector_t(6) << P1(1), P3(1), V1(1), V3(1), A1(1), A3(1)).finished();
         vector_t vz = (vector_t(3) << P1(2), P2(2), P3(2)).finished();
 
         // std::cout << "vx: " << vx.transpose() << std::endl;
@@ -343,7 +352,8 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         footstep(2) = pz(0) + pz(1)*t + pz(2)*pow(t,2) + pz(3)*pow(t,3) + pz(4)*pow(t,4) + pz(5)*pow(t,5) + pz(6)*pow(t,6) + pz(7)*pow(t,7);
 
         // std::cout << "liftIdx: " << liftIdx << " landIdx: " << landIdx << " P1: " << P1.transpose() << " P3: " << P3.transpose() << " P2: " << P2.transpose() << " footstep: " << footstep.transpose() << std::endl;
-      
+        // std::cout << " V1: " << V1.transpose() << " V3: " << V3.transpose() << " A1: " << A1.transpose() << " A3: " << A3.transpose() << std::endl;
+
         evel(0) = px(1) + 2*px(2)*pow(t,1) + 3*px(3)*pow(t,2) + 4*px(4)*pow(t,3) + 5*px(5)*pow(t,4);
         evel(1) = py(1) + 2*py(2)*pow(t,1) + 3*py(3)*pow(t,2) + 4*py(4)*pow(t,3) + 5*py(5)*pow(t,4);
         evel(2) = pz(1) + 2*pz(2)*pow(t,1) + 3*pz(3)*pow(t,2) + 4*pz(4)*pow(t,3) + 5*pz(5)*pow(t,4) + 6*pz(6)*pow(t,5) + 7*pz(7)*pow(t,6);
@@ -362,55 +372,89 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
       // optimizedInput(i) = forces[i][0];
     }
 
-    x = tc_->update(optimizedState, optimizedInput, measuredRbdState_, currMode);
-
-    vector_t qMeasured = vector_t(info.generalizedCoordinatesNum);
-    vector_t vMeasured = vector_t(info.generalizedCoordinatesNum);
-
-    qMeasured.head<3>() = measuredRbdState_.segment<3>(3);
-    qMeasured.segment<3>(3) = measuredRbdState_.head<3>();
-    qMeasured.tail(info.actuatedDofNum) = measuredRbdState_.segment(6, info.actuatedDofNum);
-    vMeasured.head<3>() = measuredRbdState_.segment<3>(info.generalizedCoordinatesNum + 3);
-    vMeasured.segment<3>(3) = getEulerAnglesZyxDerivativesFromGlobalAngularVelocity<scalar_t>(
-      qMeasured.segment<3>(3), measuredRbdState_.segment<3>(info.generalizedCoordinatesNum));
-    vMeasured.tail(info.actuatedDofNum) = measuredRbdState_.segment(info.generalizedCoordinatesNum + 6, info.actuatedDofNum);
-
-    // torque = M.block(6, 6, info.actuatedDofNum, info.actuatedDofNum) * qStar.tail(info.actuatedDofNum) + nle.tail(info.actuatedDofNum) - jst.block(0, 6, 3 * info.numThreeDofContacts, 3 * info.numThreeDofContacts).transpose() * lambdaStar;
-    torque = x.tail(info.actuatedDofNum);
-    
-    const auto& model = leggedInterface_->getPinocchioInterface().getModel();
-    auto& data = leggedInterface_->getPinocchioInterface().getData();
-
-    pinocchio::forwardKinematics(model, data, qMeasured, vMeasured);
-    pinocchio::updateFramePlacements(model, data);
-    std::vector<vector3_t> footPos = eeKinematicsPtr_->getPosition(vector_t());
-    for(int i = 0; i < info.numThreeDofContacts; i++){
-      footPos[i](2) -= 0.02;
+    vector_t types = vector_t(info.numThreeDofContacts);
+    std::cout << "switcher goal poses: ";
+    for(int i = 0; i < switcherHandles_.size(); i++){
+      types(i) = eeTypes[swapIdx[i]][swingIdx];
+      if(swingIdx >= 1){
+        bool typeConstant = eeTypes[swapIdx[i]][swingIdx] == eeTypes[swapIdx[i]][swingIdx - 1];
+        double goalPos = 0.05;
+        // std::cout << "Type constant: " << typeConstant << " t: " << t << " type: " << eeTypes[swapIdx[i]][swingIdx] << std::endl;
+        if(typeConstant || (!typeConstant && t >= 0.7)){
+          if(eeTypes[swapIdx[i]][swingIdx] == 0){
+            goalPos = 0.05;
+          }
+          else if(eeTypes[swapIdx[i]][swingIdx] == 1){
+            goalPos = -0.05;
+          }
+        }
+        else{
+          if(eeTypes[swapIdx[i]][swingIdx] == 0){
+            goalPos = -0.05;
+          }
+          else if(eeTypes[swapIdx[i]][swingIdx] == 1){
+            goalPos = 0.05;
+          }
+        }
+        std::cout << i << ": " << goalPos << " ";
+        switcherHandles_[swapIdx[i]].setCommand(goalPos, 0, 10000, 0, 0);
+      }
+      else{
+        switcherHandles_[swapIdx[i]].setCommand(0.05, 0, 10000, 0, 0);
+      } 
     }
+    std::cout << std::endl;
+    stateEstimate_->updateType(types);
+
+    x = tc_->update(optimizedState, optimizedInput, measuredRbdState_, currMode, types);
+
+    torque = x.tail(info.actuatedDofNum);
 
     // std::cout << "optimized state: " << optimizedState.transpose() << std::endl;
     // std::cout << "measured state: " << measuredRbdState_.segment<3>(3).transpose() << measuredRbdState_.head<3>().transpose() << footPos[0].transpose() << footPos[1].transpose() << footPos[2].transpose() << footPos[3].transpose() << std::endl;
     // std::cout << "optimized input: " << optimizedInput.transpose() << std::endl;
     // std::cout << "x: " << x.transpose() << std::endl;
-    // std::cout << "forces: " << x.segment(info.generalizedCoordinatesNum, 3*info.numThreeDofContacts).transpose() << std::endl;
+    std::cout << "forces: " << x.segment(info.generalizedCoordinatesNum, 3*info.numThreeDofContacts).transpose() << std::endl;
+    
+    std::cout << "optimized feet: " << optimizedState.segment(18, 3*info.numThreeDofContacts).transpose() << std::endl;
+    std::cout << "measured feet: " << footPos[0].transpose() << footPos[1].transpose() << footPos[2].transpose() << footPos[3].transpose() << std::endl;
+    // std::cout << "foot vel: " << footVel[0].transpose() << footVel[1].transpose() << footVel[2].transpose() << footVel[3].transpose() << std::endl;
     std::cout << "torque: " << torque.transpose() << std::endl;
-    // std::cout << "currMode: " << currMode << std::endl;
+    std::cout << "wheels: ";
+    for(int i = 0; i < info.numThreeDofContacts; i++){
+      std::cout << rollerHandles_[i].getPosition() << " ";
+    }
+    std::cout << std::endl;
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.73){
+    std::cout << "switchers: ";
+    for(int i = 0; i < info.numThreeDofContacts; i++){
+      std::cout << switcherHandles_[i].getPosition() << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "types: " << types.transpose() << std::endl;
+
+    std::cout << "swings: ";
+    for(int i = 0; i < info.numThreeDofContacts; i++){
+      std::cout << swings[i][swingIdx] << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "currMode: " << currMode << std::endl;
+
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.3){
     //   throw std::exception();
     // }
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.908){
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.608){
     //   throw std::exception();
     // }
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.23){
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.28){
     //   throw std::exception();
     // }
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 2.5){
-    //   throw std::exception();
-    // }
+    if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.64){
+      throw std::exception();
+    }
 
     velDes = vMeasured.tail(info.actuatedDofNum) + (period.sec + period.nsec/1.0e9) * x.segment(6, info.actuatedDofNum);
     posDes = qMeasured.tail(info.actuatedDofNum) + (period.sec + period.nsec/1.0e9) * velDes;
@@ -463,6 +507,20 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
 
   // Visualization
   robotVisualizer_->update(currentObservation_, mpcMrtInterface_->getPolicy(), mpcMrtInterface_->getCommand());
+  if (robotVisualizer_->robotStatePublisherPtr_ != nullptr) {
+    // std::cout << "switcher Pos: ";
+    std::map<std::string, scalar_t> jointPositions;
+    for(int i = 0; i < switcher_names.size(); i++){
+      // std::cout << " " << switcherHandles_[i].getPosition();
+      jointPositions[switcher_names[i]] = switcherHandles_[i].getPosition();
+    }
+    for(int i = 0; i < roller_names.size(); i++){
+      jointPositions[roller_names[i]] = rollerHandles_[i].getPosition();
+      
+    }
+    // std::cout<<std::endl;
+    robotVisualizer_->robotStatePublisherPtr_->publishTransforms(jointPositions, ros::Time::now());
+  }
   selfCollisionVisualization_->update(currentObservation_);
 
   // Publish the observation. Only needed for the command interface
