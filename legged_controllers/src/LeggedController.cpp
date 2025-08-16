@@ -141,7 +141,7 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   // for(int i = 0; i < leggedInterface_->getCentroidalModelInfo().actuatedDofNum; i++){
   //   torqueObs(i) = hybridJointHandles_[i].getFeedforward();
   // }
-  updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedInput, measuredRbdState_, torque, sensorForces, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
+  updatedMode = contactEstimate_->update(currentObservation_.time, period, optimizedState, optimizedInput, measuredRbdState_, torque, sensorForces, mpcMrtInterface_->activePrimalSolutionPtr_->modeSchedule_);
   // std::cout << measuredRbdState_(5) << std::endl;
 
   leg1_contact_sensor.data = contactFlag[0];

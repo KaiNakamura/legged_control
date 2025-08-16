@@ -19,6 +19,9 @@
 
 #include "std_msgs/Int16.h"
 #include "std_msgs/Float64.h"
+#include "std_msgs/Float64MultiArray.h"
+#include "std_msgs/Int32MultiArray.h"
+
 #include <sensor_msgs/JointState.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <visualization_msgs/Marker.h>
@@ -35,9 +38,9 @@ using namespace legged_robot;
 
 class ContactEstimate{
  public:
-  ContactEstimate(PinocchioInterface pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics);
+  ContactEstimate(const PinocchioInterface& pinocchioInterface, CentroidalModelInfo info, const PinocchioEndEffectorKinematics& eeKinematics);
 
-  size_t update(scalar_t time, const ros::Duration& period, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, vector_t sensorForces, ModeSchedule modeSchedule_);
+  size_t update(scalar_t time, const ros::Duration& period, vector_t desiredState, vector_t input, const vector_t& rbdStateMeasured, vector_t torque, vector_t sensorForces, ModeSchedule modeSchedule_);
 
   void loadSettings(const std::string& taskFile, bool verbose);
 
@@ -45,8 +48,10 @@ class ContactEstimate{
   void updateFromTopic();
   double calculateContactProbabilityTime(double phase_switch, double phase_timer);
   double calculateContactProbabilityFootHeight(double foot_height, int leg);
-  double calculateContactProbabilityFootForce(double foot_force);
+  double calculateContactProbabilityFootForce(double phase_switch, double foot_force, double force_desired);
   double calculateContactProbabilityForceSensor(double foot_force);
+  double calculateContactProbabilityFootVelocity(double phase_switch, vector3_t foot_vel);
+
   void getForceReadings(const sensor_msgs::JointState msg);
   void getMap(const grid_map_msgs::GridMap& msg);
   std::vector<Eigen::MatrixXd> KalmanCorrection(int nReadings, Eigen::MatrixXd correction_variances, Eigen::MatrixXd correction_probabilities, Eigen::MatrixXd prediction_variance, Eigen::MatrixXd prediction_probability, int numThreeDofContacts);
@@ -55,7 +60,11 @@ class ContactEstimate{
   double getKalmanProbability(double detection_mean, double measurement_mean, double measurement_variance);
 
   PinocchioInterface pinocchioInterface_;
+  PinocchioInterface pinocchioInterfaceBody_;
+  PinocchioInterface pinocchioInterfaceDesired_;
   CentroidalModelInfo info_;
+  CentroidalModelPinocchioMapping mapping_;
+
   std::unique_ptr<PinocchioEndEffectorKinematics> eeKinematics_;
   vector_t rbdState_;
   vector_t qMeasured_, vMeasured_, inputLast_;
@@ -85,97 +94,82 @@ class ContactEstimate{
   // Note: these can be updated based on other sensors (vision) and historical footsteps
   // Note: Replace 4 with num legs from somewhere
   double foot_offset = 0.02;
-  double mean_zg[4] = {foot_offset, foot_offset, foot_offset, foot_offset};
-
-  double joint_variance = 0.01;
-  double variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
-
+  bool contact[4] = {false, false, false, false};
   double force_sensor_readings[4] = {-1, -1, -1, -1};
   bool force_sensor_read = false;
-  
   bool map_recieved = false;
 
-  double mean_force = 20;
-  double variance_force = 20;
+  double mean_zg[4] = {0.05+foot_offset, 0.05+foot_offset, 0.05+foot_offset, 0.05+foot_offset};
 
-  double contact_likelihood_cutoff = 0.4;
-  double contact_loss_likelihood_cutoff = 0.4;
-  bool contact[4] = {false, false, false, false};
+  double joint_variance = 0.05;
+  double variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
+
+  double frequencyCutoff = 15; 
+  double mean_force = -5;
+  double mean_force_nc = 0;
+  double variance_force = 20;
+  double variance_force_nc = 50;
 
   double mean_force_sensor = 50;
   double variance_force_sensor = 20;
 
-  double contact_mean_force = 100;
-  double contact_variance_force = 80;
-  double contact_mean_force_sensor = 200;
-  double contact_variance_force_sensor = 200;
-  double contact_mean_zg[4] = {0.0, 0.0, 0.0, 0.0};
-  double contact_variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
+  double mean_vel_c = 0.25;
+  double mean_vel_nc = 0.5;
+  double variance_vel = 0.1;
+
+  double contact_likelihood_cutoff = 0.8;
+  double contact_loss_likelihood_cutoff = 0.7;
+
+  // double contact_mean_force = 100;
+  // double contact_variance_force = 80;
+  // double contact_mean_force_sensor = 200;
+  // double contact_variance_force_sensor = 200;
+  // double contact_mean_zg[4] = {0.0, 0.0, 0.0, 0.0};
+  // double contact_variance_zg[4] = {joint_variance, joint_variance, joint_variance, joint_variance};
 
   double kalman_variance_time = 1;
-  double kalman_variance_height[4] = {0.6, 0.6, 0.6, 0.6};
-  double kalman_variance_force = 0.5;
+  double kalman_variance_height[4] = {0.9, 0.9, 0.9, 0.9};
+  double kalman_variance_force = 0.9;
   double kalman_variance_force_sensors = 5;
+  double kalman_variance_velocity = 0.9;
+
+  double map_variance_weighting = 240;
+  double kalman_map_variance[4];
 
   bool contact_time_diff[4] = {false, false, false, false};
 
-  ros::Publisher leg1_contact_pub;
-  ros::Publisher leg2_contact_pub;
-  ros::Publisher leg3_contact_pub;
-  ros::Publisher leg4_contact_pub;
+  ros::Publisher leg_contact_pub;
+  ros::Publisher leg_contact_prob_pub;
+  ros::Publisher leg_force_sensor_pub;
+  ros::Publisher leg_force_pub;
+  ros::Publisher leg_contact_prob_time_pub;
+  ros::Publisher leg_contact_prob_force_pub;
+  ros::Publisher leg_contact_prob_height_pub;
+  ros::Publisher leg_contact_prob_velocity_pub;
+  ros::Publisher leg_contact_prob_force_sensors_pub;
+  ros::Publisher leg_height_pub;
+  ros::Publisher leg_variance_pub;
+  ros::Publisher leg_foothold_pub;
+  ros::Publisher leg_velocity_pub;
+  ros::Publisher map_debug_pub;
+  ros::Publisher map_debug2_pub;
 
-  ros::Publisher leg1_contact_prob_pub;
-  ros::Publisher leg2_contact_prob_pub;
-  ros::Publisher leg3_contact_prob_pub;
-  ros::Publisher leg4_contact_prob_pub;
+  std_msgs::Int32MultiArray leg_contact;
+  std_msgs::Float64MultiArray leg_contact_prob;
+  std_msgs::Float64MultiArray leg_contact_prob_time;
+  std_msgs::Float64MultiArray leg_contact_prob_force;
+  std_msgs::Float64MultiArray leg_contact_prob_height;
+  std_msgs::Float64MultiArray leg_contact_prob_velocity;
+  std_msgs::Float64MultiArray leg_contact_prob_force_sensors;
 
-  ros::Publisher leg1_force_sensor_pub;
-  ros::Publisher leg2_force_sensor_pub;
-  ros::Publisher leg3_force_sensor_pub;
-  ros::Publisher leg4_force_sensor_pub;
-
-  ros::Publisher leg1_force_pub;
-  ros::Publisher leg2_force_pub;
-  ros::Publisher leg3_force_pub;
-  ros::Publisher leg4_force_pub;
-
-  ros::Publisher leg1_contact_prob_time_pub;
-  ros::Publisher leg1_contact_prob_force_pub;
-  ros::Publisher leg1_contact_prob_height_pub;
-  ros::Publisher leg1_contact_prob_force_sensors_pub;
-
-  ros::Publisher leg1_height_pub;
-  ros::Publisher leg1_variance_pub;
-  ros::Publisher leg1_foothold_pub;
-
-  std_msgs::Int16 leg1_contact;
-  std_msgs::Int16 leg2_contact;
-  std_msgs::Int16 leg3_contact;
-  std_msgs::Int16 leg4_contact;
-
-  std_msgs::Float64 leg1_contact_prob;
-  std_msgs::Float64 leg2_contact_prob;
-  std_msgs::Float64 leg3_contact_prob;
-  std_msgs::Float64 leg4_contact_prob;
-
-  std_msgs::Float64 leg1_contact_prob_time;
-  std_msgs::Float64 leg1_contact_prob_force;
-  std_msgs::Float64 leg1_contact_prob_height;
-  std_msgs::Float64 leg1_contact_prob_force_sensors;
-
-  std_msgs::Float64 leg1_height;
-  std_msgs::Float64 leg1_variance;
-  std_msgs::Float64 leg1_foothold;
-
-  std_msgs::Float64 leg1_force;
-  std_msgs::Float64 leg2_force;
-  std_msgs::Float64 leg3_force;
-  std_msgs::Float64 leg4_force;
-
-  std_msgs::Float64 leg1_force_sensor;
-  std_msgs::Float64 leg2_force_sensor;
-  std_msgs::Float64 leg3_force_sensor;
-  std_msgs::Float64 leg4_force_sensor;
+  std_msgs::Float64MultiArray leg_height;
+  std_msgs::Float64MultiArray leg_variance;
+  std_msgs::Float64MultiArray leg_foothold;
+  std_msgs::Float64MultiArray leg_force;
+  std_msgs::Float64MultiArray leg_force_sensor;
+  std_msgs::Float64MultiArray leg_velocity;
+  std_msgs::Float64MultiArray map_debug;
+  std_msgs::Float64MultiArray map_debug2;
 
   ros::Subscriber joint_state_sub;
   ros::Subscriber map_sub;
