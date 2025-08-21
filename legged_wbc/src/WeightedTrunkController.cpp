@@ -52,7 +52,7 @@ Task WeightedTrunkController::formulateConstraints(const vector_t& stateDesired)
 
 Task WeightedTrunkController::formulateWeightedTasks(const vector_t& stateDesired, const vector_t& inputDesired) {
   return formulateSwingLegTask(stateDesired) * weightSwingLeg_ + formulateBaseAccelTask(stateDesired) * weightBaseAccel_ +
-         formulateContactForceTask(inputDesired) * weightContactForce_ + formulateRollingTask(stateDesired);
+         formulateContactForceTask(inputDesired) * weightContactForce_ + formulateRollingTask(stateDesired) * weightRollingLeg_;
 }
 
 void WeightedTrunkController::loadTasksSetting(const std::string& taskFile, bool verbose) {

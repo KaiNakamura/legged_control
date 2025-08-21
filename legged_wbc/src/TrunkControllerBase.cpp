@@ -31,11 +31,14 @@ vector_t TrunkControllerBase::update(const vector_t& stateDesired, const vector_
   contactFlag_ = modeNumber2StanceLeg(mode);
   typeFlag_ = typeFlag;
   numContacts_ = 0;
+  std::cout << "contact flag: ";
   for (bool flag : contactFlag_) {
     if (flag) {
       numContacts_++;
     }
+    std::cout << flag << " ";
   }
+  std::cout << std::endl;
 
   updateMeasured(rbdStateMeasured);
 
@@ -152,20 +155,25 @@ Task TrunkControllerBase::formulateRollingTask(const vector_t& stateDesired) {
       std::vector<vector3_t> posMeasured = eeKinematics_->getPosition(vector_t());
       std::vector<vector3_t> velMeasured = eeKinematics_->getVelocity(vector_t(), vector_t());
 
-      vector_t posDesired = stateDesired.segment(18, 3*i);
-      vector_t relativePosDesired = qMeasured_.segment(0, 3) - (stateDesired.segment(0, 3) - stateDesired.segment(18 + 3*i, 3));
+      vector_t posDesired = stateDesired.segment(18 + 3*i, 3);
+      vector_t velDesired = stateDesired.segment(3, 3);
 
-      double accel = rollingKp_*(relativePosDesired(0) - posMeasured[i](0)) + rollingKd_*(vMeasured_(0) - velMeasured[i](0));
+      vector_t relativePosDesired = qMeasured_.segment(0, 3) - (stateDesired.segment(0, 3) - stateDesired.segment(18 + 3*i, 3));
+      vector_t relativeVelDesired = vMeasured_.segment(0, 3);
+
+      double accel = rollingKp_*(posDesired(0) - posMeasured[i](0)) + rollingKd_*(velDesired(0) - velMeasured[i](0));
 
       a.block(j, 0, 1, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 1, info_.generalizedCoordinatesNum);
       b.segment(j, 1) = -dj_.block(3 * i, 0, 1, info_.generalizedCoordinatesNum) * vMeasured_ + (vector_t(1) << accel).finished();
       j++;
 
       // std::cout << "error here!!!!" << std::endl;
-      std::cout << i << " roll accel: " << accel << " dpos: " << relativePosDesired(0) << " mpos: " << posMeasured[i](0) << " dvel: " << vMeasured_(0) << " mvel: " << velMeasured[i](0) << std::endl;
+      std::cout << i << " roll accel: " << accel << " dpos: " << posDesired(0) << " mpos: " << posMeasured[i](0) << " dvel: " << vMeasured_(0) << " mvel: " << velMeasured[i](0) << std::endl;
     }
   }
 
+  // std::cout << "rolling matrix a: " << a << std::endl;
+  // std::cout << "rolling matrix b: " << b << std::endl;
   return {a, b, matrix_t(), vector_t()};
 }
 // From https://arxiv.org/pdf/1904.04595
@@ -206,8 +214,15 @@ Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
   matrix_t linStanceKp = (matrix_t(3,3) << linStanceKp_ , 0, 0,
                                             0, linStanceKp_, 0,
                                             0, 0, linStanceKp_).finished();
-  vector_t ddotRRef = linAccDesired + linStanceKp * (linPosDesired - linPosMeasured) + linStanceKd_ * (linVelDesired - linVelMeasured);
-  vector_t dotOmegaRef = angAccDesired + angStanceKp * (angPosDesired - angPosMeasured) + angStanceKd_ * I * (angVelDesired - angVelMeasured); //Note no omegas here it's all derivatives of euler angles
+  matrix_t angStanceKd = (matrix_t(3,3) << angStanceKd_ , 0, 0,
+                                            0, angStanceKd_, 0,
+                                            0, 0, angStanceKd_).finished();
+  matrix_t linStanceKd = (matrix_t(3,3) << linStanceKd_ , 0, 0,
+                                            0, linStanceKd_, 0,
+                                            0, 0, linStanceKd_).finished();
+
+  vector_t ddotRRef = linAccDesired + linStanceKp * (linPosDesired - linPosMeasured) + linStanceKd * (linVelDesired - linVelMeasured);
+  vector_t dotOmegaRef = angAccDesired + angStanceKp * (angPosDesired - angPosMeasured) + angStanceKd * (angVelDesired - angVelMeasured); //Note no omegas here it's all derivatives of euler angles
 
   vector_t ref = vector_t(6);
   ref << ddotRRef, dotOmegaRef;
@@ -223,8 +238,8 @@ Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
   G.row(1) *= 1.5;
   g(1) *= 1.5;
 
-  G.row(0) *= 1.2;
-  g(0) *= 1.2;
+  G.row(0) *= 1.1;
+  g(0) *= 1.1;
 
   return {G, g, matrix_t(), vector_t()};
 }

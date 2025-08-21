@@ -130,8 +130,11 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
   benchmark::RepeatedTimer mpcTimer_;
   benchmark::RepeatedTimer wbcTimer_;
 
-  std::vector<std::string> switcher_names{"LF_switcher", "LH_switcher", "RF_switcher", "RH_switcher"};
+  std::vector<std::string> switcher_names{"LF_switcher", "RF_switcher", "LH_switcher", "RH_switcher"};
   std::vector<std::string> roller_names{"LF_roller", "LH_roller", "RF_roller", "RH_roller"};
+
+  double switcherUpper = 0.05;
+  double switcherLower = -0.07;
 };
 
 class LeggedCheaterController : public LeggedController {

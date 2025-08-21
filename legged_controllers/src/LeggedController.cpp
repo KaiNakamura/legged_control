@@ -375,28 +375,28 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
     vector_t types = vector_t(info.numThreeDofContacts);
     std::cout << "switcher goal poses: ";
     for(int i = 0; i < switcherHandles_.size(); i++){
-      types(i) = eeTypes[swapIdx[i]][swingIdx];
+      types(swapIdx[i]) = eeTypes[i][swingIdx];
       if(swingIdx >= 1){
-        bool typeConstant = eeTypes[swapIdx[i]][swingIdx] == eeTypes[swapIdx[i]][swingIdx - 1];
-        double goalPos = 0.05;
+        bool typeConstant = eeTypes[i][swingIdx] == eeTypes[i][swingIdx - 1];
+        double goalPos = switcherUpper;
         // std::cout << "Type constant: " << typeConstant << " t: " << t << " type: " << eeTypes[swapIdx[i]][swingIdx] << std::endl;
-        if(typeConstant || (!typeConstant && t >= 0.7)){
-          if(eeTypes[swapIdx[i]][swingIdx] == 0){
-            goalPos = 0.05;
+        if(typeConstant || t >= 0.7){
+          if(types(swapIdx[i]) == 0){
+            goalPos = switcherUpper;
           }
-          else if(eeTypes[swapIdx[i]][swingIdx] == 1){
-            goalPos = -0.05;
+          else if(types(swapIdx[i]) == 1){
+            goalPos = switcherLower;
           }
         }
         else{
-          if(eeTypes[swapIdx[i]][swingIdx] == 0){
-            goalPos = -0.05;
+          if(types(swapIdx[i]) == 0){
+            goalPos = switcherLower;
           }
-          else if(eeTypes[swapIdx[i]][swingIdx] == 1){
-            goalPos = 0.05;
+          else if(types(swapIdx[i]) == 1){
+            goalPos = switcherUpper;
           }
         }
-        std::cout << i << ": " << goalPos << " ";
+        std::cout << goalPos << " ";
         switcherHandles_[swapIdx[i]].setCommand(goalPos, 0, 10000, 0, 0);
       }
       else{
@@ -448,13 +448,17 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
     //   throw std::exception();
     // }
 
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.758){
+    //   throw std::exception();
+    // }
+
     // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.28){
     //   throw std::exception();
     // }
 
-    if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.64){
-      throw std::exception();
-    }
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 3.08){
+    //   throw std::exception();
+    // }
 
     velDes = vMeasured.tail(info.actuatedDofNum) + (period.sec + period.nsec/1.0e9) * x.segment(6, info.actuatedDofNum);
     posDes = qMeasured.tail(info.actuatedDofNum) + (period.sec + period.nsec/1.0e9) * velDes;

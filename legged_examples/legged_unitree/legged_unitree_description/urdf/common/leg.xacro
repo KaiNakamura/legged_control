@@ -174,7 +174,7 @@
             <child link="${prefix}_dummy"/>
             <axis xyz="0 1 0"/>
             <dynamics damping="0." friction="0"/>
-            <limit effort="1e100" velocity="5" lower="-0.05" upper="0.05"/>
+            <limit effort="1e100" velocity="10" lower="-0.05" upper="0.05"/>
         </joint>
 
         <link name="${prefix}_dummy">
@@ -188,23 +188,16 @@
             </inertial>
         </link>
 
-        <joint name="${prefix}_roller" type="revolute">
+        <joint name="${prefix}_roller" type="continuous">
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <parent link="${prefix}_dummy"/>
             <child link="${prefix}_wheel"/>
             <axis xyz="0 0 1"/>
-            <dynamics damping="0" friction="0.03"/>
-            <limit effort="0" velocity="10" lower="-1e100" upper="1e100"/>
+            <dynamics damping="0.00" friction="0.00"/>
+            <limit effort="0" velocity="10"/>
         </joint>
 
         <link name="${prefix}_wheel">
-            <visual>
-                <origin rpy="0 0 0" xyz="0 0 0"/>
-                <geometry>
-                    <cylinder length="0.01" radius="0.03"/>    
-                </geometry>
-                <material name="orange"/>
-            </visual>
 
             <visual>
                 <geometry>
@@ -263,10 +256,25 @@
 
         <gazebo reference="${prefix}_wheel">
             <self_collide>false</self_collide>
-            <mu1>0.6</mu1>
-            <mu2>0.6</mu2>
-            <kp value="1000000.0"/>
-            <kd value="100.0"/>
+            <fdir1>0 0 1</fdir1>  <!-- forces friction to against rolling direction-->
+            <!-- Friction: low in rolling dir (mu1), higher sideways (mu2) -->
+            <mu1>100.00</mu1>
+            <mu2>0.03</mu2>
+
+            <!-- Allow a bit of micro-slip to avoid stiction -->
+            <slip1>0.00</slip1>
+            <slip2>0.00</slip2>
+
+            <!-- Soften contact to avoid impulsive locking -->
+            <kp>200000.0</kp>   <!-- 2e5 -->
+            <kd>20.0</kd>
+
+            <!-- increase allowed interpenetration before big forces -->
+            <min_depth>0.002</min_depth>
+        </gazebo>
+
+        <gazebo reference="${prefix}_roller">
+            <passive>true</passive>
         </gazebo>
 
         <gazebo reference="${prefix}_switcher">
