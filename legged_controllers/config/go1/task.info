@@ -302,15 +302,15 @@ swingLegTask
 
 rollingTask
 {
-    kp                   350
-    kd                   37
+    kp                   700
+    kd                   200
 }
 
 
 movementTask
 {
-    linkp                   350
-    linkd                   50
+    linkp                   200
+    linkd                   55
     angkp                   100
     angkd                   10
 }
@@ -318,9 +318,9 @@ movementTask
 weight
 {
     swingLeg        100
-    rollingLeg      10
-    baseAccel       1
-    contactForce    0.01
+    rollingLeg      1
+    baseAccel       0.1
+    contactForce    0.001
 }
 
 ; State Estimation

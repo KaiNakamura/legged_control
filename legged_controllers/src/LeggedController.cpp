@@ -90,6 +90,10 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
   for (const auto& name : leggedInterface_->modelSettings().contactNames3DoF) {
     contactHandles_.push_back(contactInterface->getHandle(name));
   }
+    for (const auto& name : wheel_names) {
+    contactHandles_.push_back(contactInterface->getHandle(name));
+  }
+
   imuSensorHandle_ = robot_hw->get<hardware_interface::ImuSensorInterface>()->getHandle("unitree_imu");
 
   // State estimation
@@ -107,6 +111,14 @@ bool LeggedController::init(hardware_interface::RobotHW* robot_hw, ros::NodeHand
 
   // Safety Checker
   safetyChecker_ = std::make_shared<SafetyChecker>(leggedInterface_->getCentroidalModelInfo());
+  CSVFormat = Eigen::IOFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ",", ",", "", ",");
+
+  outputFile.open("solution.csv", std::ios::out);
+  if (!outputFile.is_open()) {
+    std::cerr << "Error opening file!" << std::endl;
+  }
+  std::cout << "output file open: " << outputFile.is_open() << std::endl;
+  outputFile << "Time,x,y,z,vx,vy,vz,tx,ty,tz,ox,oy,oz,dx,dy,dz,dvx,dvy,dvz,dax,day,daz,dtx,dty,dtz,dox,doy,doz,dodx,dody,dodz,f1x,f1y,f1z,f2x,f2y,f2z,f3x,f3y,f3z,f4x,f4y,f4z,df1x,df1y,df1z,df2x,df2y,df2z,df3x,df3y,df3z,df4x,df4y,df4z,ee1x,ee1y,ee1z,ee2x,ee2y,ee2z,ee3x,ee3y,ee3z,ee4x,ee4y,ee4z,dee1x,dee1y,dee1z,dee2x,dee2y,dee2z,dee3x,dee3y,dee3z,dee4x,dee4y,dee4z,cf1,cf2,cf3,cf4,cw1,cw2,cw3,cw4,dee1vx,dee1vy,dee1vz,dee2vx,dee2vy,dee2vz,dee3vx,dee3vy,dee3vz,dee4vx,dee4vy,dee4vz,ee1vx,ee1vy,ee1vz,ee2vx,ee2vy,ee2vz,ee3vx,ee3vy,ee3vz,ee4vx,ee4vy,ee4vz,\n";
 
   return true;
 }
@@ -133,6 +145,7 @@ void LeggedController::starting(const ros::Time& time) {
   ROS_INFO_STREAM("Initial policy has been received.");
 
   mpcRunning_ = true;
+
 }
 
 void LeggedController::update(const ros::Time& time, const ros::Duration& period) {
@@ -237,19 +250,24 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
     // Load csv data into optimized state vector
     // Change from xyz format to zyx
     Eigen::VectorXd hqb = Eigen::VectorXd::Zero(info.generalizedCoordinatesNum);
-    hqb << states[0][idx], states[1][idx], states[2][idx], states[3][idx], states[4][idx], states[5][idx], states[6][idx], states[7][idx], states[8][idx], 
-            states[11][idx], states[10][idx], states[9][idx], states[14][idx], states[13][idx], states[12][idx], states[17][idx], states[16][idx], states[15][idx];
+    hqb << states[0][idx]+0.00, states[1][0], states[2][idx], states[3][idx], 0, states[5][idx], states[6][idx], 0, states[8][idx], 
+            0, 0, 0, 0, 0, 0, 0, 0, 0;
     // hqb << states[0][0], states[1][0], 0.3, states[3][0], states[4][0], states[5][0], states[6][0], states[7][0], states[8][0], 
     //         states[11][0], states[10][0], states[9][0], states[14][0], states[13][0], states[12][0], states[17][0], states[16][0], states[15][0];
 
     Eigen::VectorXd hqbNext = Eigen::VectorXd::Zero(info.generalizedCoordinatesNum);
-    hqbNext << states[0][idx + 1], states[1][idx + 1], states[2][idx + 1], states[3][idx + 1], states[4][idx + 1], states[5][idx + 1], states[6][idx + 1], states[7][idx + 1], states[8][idx + 1], 
-            states[11][idx + 1], states[10][idx + 1], states[9][idx + 1], states[14][idx + 1], states[13][idx + 1], states[12][idx + 1], states[17][idx + 1], states[16][idx + 1], states[15][idx + 1];
+    hqbNext << states[0][idx + 1]+0.00, states[1][0], states[2][idx + 1], states[3][idx + 1], 0, states[5][idx + 1], states[6][idx + 1], 0, states[8][idx + 1], 
+            0, 0, 0, 0, 0, 0, 0, 0, 0;
 
-    double t = (elapsedTime.sec + elapsedTime.nsec/1.0e9)/knotTime - idx;
+    double swingTime = times[times.size() - 1]/swings[0].size();
+    double swingHeight = 0.05;
+    double t = (elapsedTime.sec + elapsedTime.nsec/1.0e9 - 0.006)/swingTime - (int)((elapsedTime.sec + elapsedTime.nsec/1.0e9 - 0.006)/swingTime);
+
     for(int i = 0; i < 18; i++){
       hqb(i) = (1-t)*hqb(i) + t*hqbNext(i);
     }
+    hqb(1) = 0.9-hqb(1); hqb(4) = -hqb(4); hqb(7) = -hqb(7);
+    hqb(11) = -hqb(11); hqb(14) = -hqb(14); hqb(17) = -hqb(17);
     optimizedState.segment<18>(0) = hqb;
 
     int swapIdx[info.numThreeDofContacts] {2, 0, 1, 3};
@@ -259,6 +277,48 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         currMode += (int) pow(2, info.numThreeDofContacts-1-swapIdx[i]);
       }
     }
+
+    vector_t types = vector_t(info.numThreeDofContacts);
+    std::cout << "switcher goal poses: ";
+    for(int i = 0; i < switcherHandles_.size(); i++){
+      types(swapIdx[i]) = eeTypes[i][swingIdx];
+      double goalPos = switcherUpper;
+
+      if(swingIdx >= 1){
+        bool typeConstant = eeTypes[i][swingIdx] == eeTypes[i][swingIdx - 1];
+        // std::cout << "Type constant: " << typeConstant << " t: " << t << " type: " << eeTypes[swapIdx[i]][swingIdx] << std::endl;
+        if(typeConstant || t >= 0.9){
+          if(types(swapIdx[i]) == 0){
+            goalPos = switcherUpper;
+          }
+          else if(types(swapIdx[i]) == 1){
+            goalPos = switcherLower;
+          }
+        }
+        else{
+          if(types(swapIdx[i]) == 0){
+            goalPos = switcherLower;
+          }
+          else if(types(swapIdx[i]) == 1){
+            goalPos = switcherUpper;
+          }
+        }
+        std::cout << goalPos << " ";
+        switcherHandles_[swapIdx[i]].setCommand(goalPos, 0, 17500, 0, 0);
+      }
+      else{
+        if(types(swapIdx[i]) == 0){
+          goalPos = switcherUpper;
+        }
+        else if(types(swapIdx[i]) == 1){
+          goalPos = switcherLower;
+        }
+        std::cout << goalPos << " ";
+
+        switcherHandles_[swapIdx[i]].setCommand(goalPos, 0, 10000, 0, 0);
+      } 
+    }
+    std::cout << std::endl;
     // currMode = 15;
     vector_t qMeasured = vector_t(info.generalizedCoordinatesNum);
     vector_t vMeasured = vector_t(info.generalizedCoordinatesNum);
@@ -285,15 +345,37 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
 
     Eigen::VectorXd ees = Eigen::VectorXd::Zero(3*info.numThreeDofContacts);
     Eigen::VectorXd evs = Eigen::VectorXd::Zero(3*info.numThreeDofContacts);
-    double swingTime = times[times.size() - 1]/swings[0].size();
-    double swingHeight = 0.1;
-    t = (elapsedTime.sec + elapsedTime.nsec/1.0e9 - 0.006)/swingTime - (int)((elapsedTime.sec + elapsedTime.nsec/1.0e9 - 0.006)/swingTime);
 
     for(int i = 0; i < info.numThreeDofContacts; i++){
       vector_t footstep(3);
       vector_t evel(3);
+      vector_t eVec(3);
+      eVec << eePos[0 + 3*i][idx], eePos[1 + 3*i][idx], eePos[2 + 3*i][idx];
+
+      int liftIdx = swingIdx * times.size() / swings[0].size();
+      int landIdx = (swingIdx + 1) * times.size() / swings[0].size() - 1;
+
+      vector_t eVecLift(3);
+      vector_t eVecLand(3);
+      eVecLift << eePos[0 + 3*i][liftIdx], eePos[1 + 3*i][liftIdx], eePos[2 + 3*i][liftIdx];
+      eVecLand << eePos[0 + 3*i][landIdx], eePos[1 + 3*i][landIdx], eePos[2 + 3*i][landIdx];
+
+      vector_t relativeEEPos(3);
+      vector_t relativeEELift(3);
+      vector_t relativeEELand(3);
+      if(abs(optimizedState(0) - qMeasured(0)) > 0.3 || types(swapIdx[i]) == 1){
+        relativeEEPos = qMeasured.segment(0, 3) - (optimizedState.segment(0, 3) - eVec);
+        relativeEELift = qMeasured.segment(0, 3) - (optimizedState.segment(0, 3) - eVecLift);
+        relativeEELand = qMeasured.segment(0, 3) - (optimizedState.segment(0, 3) - eVecLand);
+      }
+      else{
+        relativeEEPos = eVec;
+        relativeEELift = eVecLift;
+        relativeEELand = eVecLand;
+      }
+
       if(abs(swings[i][swingIdx]) <= 0.001){
-        footstep << eePos[0 + 3*i][idx], eePos[1 + 3*i][idx], eePos[2 + 3*i][idx];
+        footstep = relativeEEPos;
         evel << 0, 0, 0;
       }
       else{
@@ -313,10 +395,8 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
                                         452, -64, -388,
                                         -120, 0, 120).finished();
 
-        int liftIdx = swingIdx * times.size() / swings[0].size();
-        int landIdx = (swingIdx + 1) * times.size() / swings[0].size() - 1;
-        P1 << eePos[0 + 3*i][liftIdx], eePos[1 + 3*i][liftIdx], eePos[2 + 3*i][liftIdx];
-        P3 << eePos[0 + 3*i][landIdx], eePos[1 + 3*i][landIdx], eePos[2 + 3*i][landIdx];     
+        P1 << relativeEELift;
+        P3 << relativeEELand;     
         P2 << (P1(0) + P3(0))/2.0, (P1(1) + P3(1))/2.0, std::max(P1(2), P2(2)) + swingHeight;
 
         V1 << (eePos[0 + 3*i][liftIdx]-eePos[0 + 3*i][liftIdx-1])/knotTime, (eePos[1 + 3*i][liftIdx]-eePos[1 + 3*i][liftIdx-1])/knotTime, (eePos[2 + 3*i][liftIdx]-eePos[2 + 3*i][liftIdx-1])/knotTime;
@@ -361,8 +441,12 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         // std::cout << "evel: " << evel.transpose() << std::endl;
       }
       // footstep << eePos[0 + 3*i][idx], eePos[1 + 3*i][idx], eePos[2 + 3*i][idx];
+      footstep[1] = 0.9 - footstep[1];
+      evel[1] = -evel[1];
+
       ees.segment<3>(3*swapIdx[i]) = footstep;
       evs.segment<3>(3*swapIdx[i]) = evel;
+      
     }
     optimizedState.segment(18, 3*info.numThreeDofContacts) = ees;
     optimizedState.segment(18 + 3*info.numThreeDofContacts, 3*info.numThreeDofContacts) = evs;
@@ -372,44 +456,33 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
       // optimizedInput(i) = forces[i][0];
     }
 
-    vector_t types = vector_t(info.numThreeDofContacts);
-    std::cout << "switcher goal poses: ";
-    for(int i = 0; i < switcherHandles_.size(); i++){
-      types(swapIdx[i]) = eeTypes[i][swingIdx];
-      if(swingIdx >= 1){
-        bool typeConstant = eeTypes[i][swingIdx] == eeTypes[i][swingIdx - 1];
-        double goalPos = switcherUpper;
-        // std::cout << "Type constant: " << typeConstant << " t: " << t << " type: " << eeTypes[swapIdx[i]][swingIdx] << std::endl;
-        if(typeConstant || t >= 0.7){
-          if(types(swapIdx[i]) == 0){
-            goalPos = switcherUpper;
-          }
-          else if(types(swapIdx[i]) == 1){
-            goalPos = switcherLower;
-          }
-        }
-        else{
-          if(types(swapIdx[i]) == 0){
-            goalPos = switcherLower;
-          }
-          else if(types(swapIdx[i]) == 1){
-            goalPos = switcherUpper;
-          }
-        }
-        std::cout << goalPos << " ";
-        switcherHandles_[swapIdx[i]].setCommand(goalPos, 0, 10000, 0, 0);
-      }
-      else{
-        switcherHandles_[swapIdx[i]].setCommand(0.05, 0, 10000, 0, 0);
-      } 
-    }
-    std::cout << std::endl;
     stateEstimate_->updateType(types);
 
     x = tc_->update(optimizedState, optimizedInput, measuredRbdState_, currMode, types);
 
     torque = x.tail(info.actuatedDofNum);
 
+    outputFile << elapsedTime.sec + elapsedTime.nsec/1.0e9 << ",";
+    outputFile << qMeasured.head<3>().transpose().format(CSVFormat) << vMeasured.head<3>().transpose().format(CSVFormat) << qMeasured.segment<3>(3).transpose().format(CSVFormat) << vMeasured.segment<3>(3).transpose().format(CSVFormat);
+    outputFile << hqb.transpose().format(CSVFormat);
+    outputFile << x.segment(info.generalizedCoordinatesNum, 3*info.numThreeDofContacts).transpose().format(CSVFormat);
+    outputFile << optimizedInput.transpose().format(CSVFormat);
+    outputFile << footPos[0].transpose().format(CSVFormat) << footPos[1].transpose().format(CSVFormat) << footPos[2].transpose().format(CSVFormat) << footPos[3].transpose().format(CSVFormat);
+    outputFile << optimizedState.segment(18, 3*info.numThreeDofContacts).transpose().format(CSVFormat);
+
+    for(int i = 0; i < contactHandles_.size(); i++){
+      if(i<4){
+        outputFile << contactHandles_[i].isContact() << ",";
+      }
+      else{
+        outputFile << contactHandles_[i].isContact() << ",";
+      }
+    }
+
+    outputFile << optimizedState.segment(18 + 3*info.numThreeDofContacts, 3*info.numThreeDofContacts).transpose().format(CSVFormat);
+    outputFile << footVel[0].transpose().format(CSVFormat) << footVel[1].transpose().format(CSVFormat) << footVel[2].transpose().format(CSVFormat) << footVel[3].transpose().format(CSVFormat);
+    outputFile <<"\n";
+    
     // std::cout << "optimized state: " << optimizedState.transpose() << std::endl;
     // std::cout << "measured state: " << measuredRbdState_.segment<3>(3).transpose() << measuredRbdState_.head<3>().transpose() << footPos[0].transpose() << footPos[1].transpose() << footPos[2].transpose() << footPos[3].transpose() << std::endl;
     // std::cout << "optimized input: " << optimizedInput.transpose() << std::endl;
@@ -435,28 +508,40 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
 
     std::cout << "swings: ";
     for(int i = 0; i < info.numThreeDofContacts; i++){
-      std::cout << swings[i][swingIdx] << " ";
+      std::cout << swings[swapIdx[i]][swingIdx] << " ";
     }
     std::cout << std::endl;
     std::cout << "currMode: " << currMode << std::endl;
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.3){
+    std::cout << "Contacts: ";
+    for(int i = 0; i < contactHandles_.size(); i++){
+      std::cout << contactHandles_[i].isContact() << " ";
+    }
+    std::cout << std::endl;
+
+    if (!outputFile.is_open()) {
+      std::cerr << "Error opening file!" << std::endl;
+      return; // Handle error appropriately
+    }
+
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.01){
     //   throw std::exception();
     // }
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.608){
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.208){
     //   throw std::exception();
     // }
 
     // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 0.758){
+    //   outputFile.close();
     //   throw std::exception();
     // }
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.28){
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 1.858){
     //   throw std::exception();
     // }
 
-    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 3.08){
+    // if(elapsedTime.sec + elapsedTime.nsec/1.0e9 > 2.48){
     //   throw std::exception();
     // }
 

@@ -23,6 +23,7 @@
 
 #include <legged_estimation/ContactEstimate.h>
 #include "std_msgs/Time.h"
+#include <Eigen/src/Core/IO.h>
 
 namespace legged {
 using namespace ocs2;
@@ -132,9 +133,13 @@ class LeggedController : public controller_interface::MultiInterfaceController<H
 
   std::vector<std::string> switcher_names{"LF_switcher", "RF_switcher", "LH_switcher", "RH_switcher"};
   std::vector<std::string> roller_names{"LF_roller", "LH_roller", "RF_roller", "RH_roller"};
+  std::vector<std::string> wheel_names{"LF_wheel", "RF_wheel", "LH_wheel", "RH_wheel"};
+
+  std::ofstream outputFile;
+  Eigen::IOFormat CSVFormat;
 
   double switcherUpper = 0.05;
-  double switcherLower = -0.07;
+  double switcherLower = -0.05;
 };
 
 class LeggedCheaterController : public LeggedController {

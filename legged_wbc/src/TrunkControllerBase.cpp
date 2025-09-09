@@ -161,7 +161,7 @@ Task TrunkControllerBase::formulateRollingTask(const vector_t& stateDesired) {
       vector_t relativePosDesired = qMeasured_.segment(0, 3) - (stateDesired.segment(0, 3) - stateDesired.segment(18 + 3*i, 3));
       vector_t relativeVelDesired = vMeasured_.segment(0, 3);
 
-      double accel = rollingKp_*(posDesired(0) - posMeasured[i](0)) + rollingKd_*(velDesired(0) - velMeasured[i](0));
+      double accel = rollingKp_*(posDesired(0) - posMeasured[i](0)) + rollingKd_*(relativeVelDesired(0) - velMeasured[i](0));
 
       a.block(j, 0, 1, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 1, info_.generalizedCoordinatesNum);
       b.segment(j, 1) = -dj_.block(3 * i, 0, 1, info_.generalizedCoordinatesNum) * vMeasured_ + (vector_t(1) << accel).finished();
@@ -191,14 +191,9 @@ Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
   vector_t linPosMeasured = qMeasured_.segment(0, 3);
   vector_t linVelMeasured = vMeasured_.segment(0, 3);
 
-  // Note delete this later
-  linPosDesired(1) = 0.9 - linPosDesired(1);
-  linVelDesired(1) = -linVelDesired(1);
-  linAccDesired(1) = -linAccDesired(1);
-
-  angPosDesired(1) = -angPosDesired(1);
-  angVelDesired(1) = -angVelDesired(1);
-  angAccDesired(1) = -angAccDesired(1);
+  angPosDesired(0) = -angPosDesired(0);
+  angVelDesired(0) = -angVelDesired(0);
+  angAccDesired(0) = -angAccDesired(0);
 
   vector_t angPosMeasured = qMeasured_.segment(3, 3);
   vector_t angVelMeasured = vMeasured_.segment(3, 3);
@@ -235,11 +230,14 @@ Task TrunkControllerBase::formulateBaseAccelTask(const vector_t& stateDesired) {
   G.block(0, 0, 6, 6) = I6;
   g = ref;
 
-  G.row(1) *= 1.5;
-  g(1) *= 1.5;
+  G.row(2) *= 2;
+  g(2) *= 2;
 
-  G.row(0) *= 1.1;
-  g(0) *= 1.1;
+  G.row(1) *= 2;
+  g(1) *= 2;
+
+  G.row(0) *= 0.8;  
+  g(0) *= 0.8;
 
   return {G, g, matrix_t(), vector_t()};
 }
@@ -300,12 +298,6 @@ Task TrunkControllerBase::formulateSwingLegTask(const vector_t& stateDesired) {
   vector_t posDesired = stateDesired.segment(18, 3*info_.numThreeDofContacts);
   vector_t velDesired = stateDesired.segment(18 + 3*info_.numThreeDofContacts, 3*info_.numThreeDofContacts);
 
-  // Note: Delete this later
-  for (size_t i = 0; i < info_.numThreeDofContacts; ++i) {
-    posDesired(3*i + 1) = 0.9 - posDesired(3*i + 1);
-    velDesired(3*i + 1) = - velDesired(3*i + 1);
-  }
-
   // std::cout << "ees desired: " << posDesired.transpose() << std::endl; 
   // std::cout << "ees measured: " << posMeasured[0].transpose() << posMeasured[1].transpose() << posMeasured[2].transpose() << posMeasured[3].transpose() << std::endl; 
   // std::cout << "evs desired: " << velDesired.transpose() << std::endl;
@@ -320,8 +312,8 @@ Task TrunkControllerBase::formulateSwingLegTask(const vector_t& stateDesired) {
     if (!contactFlag_[i]) {
       matrix3_t kp(3, 3); matrix3_t kd(3, 3);
       kp.setZero(); kd.setZero();
-      kp(0,0) = swingKp_; kp(1,1) = swingKp_; kp(2,2) = swingKp_; 
-      kd(0,0) = swingKd_; kd(1,1) = swingKd_; kd(2,2) = 10*swingKd_; 
+      kp(0,0) = swingKp_; kp(1,1) = swingKp_; kp(2,2) = 5*swingKp_; 
+      kd(0,0) = swingKd_; kd(1,1) = swingKd_; kd(2,2) = 8*swingKd_; 
 
       vector3_t accel = kp*(posDesired.segment<3>(3*i) - posMeasured[i]) + kd*(velDesired.segment<3>(3*i) - velMeasured[i]);
       a.block(3 * j, 0, 3, info_.generalizedCoordinatesNum) = j_.block(3 * i, 0, 3, info_.generalizedCoordinatesNum);

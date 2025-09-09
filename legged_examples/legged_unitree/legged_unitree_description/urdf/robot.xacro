@@ -59,5 +59,4 @@
     <!-- <xacro:include filename="$(find legged_unitree_description)/urdf/onshape_robot.xacro"/>
     <xacro:include_onshape_robot prefix="onshape_"/> -->
 
-    
 </robot>

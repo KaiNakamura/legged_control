@@ -97,6 +97,7 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   r.block(12, 12, 12, 12) = r_.block(12, 12, 12, 12) * footSensorNoiseVelocity_;
   r.block(24, 24, 4, 4) = r_.block(24, 24, 4, 4) * footHeightSensorNoise_;
 
+  int nWheels = 0;
   for (int i = 0; i < 4; i++) {
     int i1 = 3 * i;
 
@@ -117,8 +118,9 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
     vs_.segment(3 * i, 3) = -eeVel[i];
 
     if(eeTypes_(i) == 1){
-      ps_.segment(3*i, 3)[0] += dt*xHat_(3) + dt*dt*0.5*xHat_(0);
-      vs_.segment(3*i, 3)[0] += dt*xHat_(0);
+      ps_.segment(3*i, 3)[0] -= dt*xHat_(3) + dt*dt*0.5*xHat_(0);
+      vs_.segment(3*i, 3)[0] -= dt*xHat_(0);
+      nWheels++;
     }
   }
 
@@ -136,7 +138,9 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   Eigen::Matrix<scalar_t, 28, 28> s = c_ * pm * cT + r;
 
   Eigen::Matrix<scalar_t, 28, 1> sEy = s.lu().solve(ey);
-  xHat_ += pm * cT * sEy;
+  if(nWheels != 4){
+    xHat_ += pm * cT * sEy;
+  }
 
   Eigen::Matrix<scalar_t, 28, 18> sC = s.lu().solve(c_);
   p_ = (Eigen::Matrix<scalar_t, 18, 18>::Identity() - pm * cT * sC) * pm;
